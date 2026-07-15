@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('vscode', () => ({}));
+vi.mock('vscode', () => ({
+  Uri: { joinPath: (_base: unknown, ...parts: string[]) => ({ toString: () => parts.join('/') }) }
+}));
 
 describe('diff webview markup', () => {
   it('uses a unified table with full-row diff classes and no per-line code blocks', async () => {
@@ -76,17 +78,18 @@ describe('diff webview markup', () => {
     expect(html).toContain('[hidden]{display:none!important}');
   });
 
-  it('contains a reduced-motion-safe fireworks effect that can start during streaming', async () => {
+  it('loads the Basic Cannon bundle and can launch it during streaming', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
       kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', attempt: 1,
       preview: { verdict: 'correct', summary: '答案正确' }
-    }, 'nonce', true);
-    expect(html).toContain('function launchFireworks()');
-    expect(html).toContain("event.data.celebrateCorrect)launchFireworks()");
-    expect(html).toContain("if(true)queueMicrotask(launchFireworks)");
-    expect(html).toContain('@media (prefers-reduced-motion:reduce)');
-    expect(html).toContain("layer.setAttribute('aria-hidden','true')");
+    }, 'nonce', true, 'vscode-resource:/dist/confetti.js');
+    expect(html).toContain('src="vscode-resource:/dist/confetti.js"');
+    expect(html).toContain('function launchConfetti()');
+    expect(html).toContain("event.data.celebrateCorrect)launchConfetti()");
+    expect(html).toContain("if(true)queueMicrotask(launchConfetti)");
+    expect(html).toContain("typeof window.launchJudgeConfetti!=='function'");
+    expect(html).not.toContain("document.createElement('i')");
   });
 
   it('emits the celebration exactly once when the streamed verdict first becomes correct', async () => {
@@ -94,6 +97,7 @@ describe('diff webview markup', () => {
     const messages: Array<{ celebrateCorrect?: boolean }> = [];
     const webview = {
       options: {}, html: '',
+      asWebviewUri: (uri: { toString(): string }) => uri,
       onDidReceiveMessage: () => ({ dispose() {} }),
       postMessage: async (message: { celebrateCorrect?: boolean }) => { messages.push(message); return true; }
     };

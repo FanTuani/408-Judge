@@ -1,7 +1,7 @@
 import * as esbuild from 'esbuild';
 
 const watch = process.argv.includes('--watch');
-const context = await esbuild.context({
+const extensionContext = await esbuild.context({
   entryPoints: ['src/extension.ts'],
   bundle: true,
   outfile: 'dist/extension.js',
@@ -12,10 +12,21 @@ const context = await esbuild.context({
   sourcemap: true,
   logLevel: 'info'
 });
+const confettiContext = await esbuild.context({
+  entryPoints: ['src/confetti.ts'],
+  bundle: true,
+  outfile: 'dist/confetti.js',
+  format: 'iife',
+  platform: 'browser',
+  target: 'chrome120',
+  sourcemap: true,
+  minify: true,
+  logLevel: 'info'
+});
 
 if (watch) {
-  await context.watch();
+  await Promise.all([extensionContext.watch(), confettiContext.watch()]);
 } else {
-  await context.rebuild();
-  await context.dispose();
+  await Promise.all([extensionContext.rebuild(), confettiContext.rebuild()]);
+  await Promise.all([extensionContext.dispose(), confettiContext.dispose()]);
 }
