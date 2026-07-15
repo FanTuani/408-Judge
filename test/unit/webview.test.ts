@@ -75,4 +75,34 @@ describe('diff webview markup', () => {
     expect(html).toContain('id="thinking-spinner" class="spinner" hidden');
     expect(html).toContain('[hidden]{display:none!important}');
   });
+
+  it('contains a reduced-motion-safe fireworks effect that can start during streaming', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', attempt: 1,
+      preview: { verdict: 'correct', summary: '答案正确' }
+    }, 'nonce', true);
+    expect(html).toContain('function launchFireworks()');
+    expect(html).toContain("event.data.celebrateCorrect)launchFireworks()");
+    expect(html).toContain("if(true)queueMicrotask(launchFireworks)");
+    expect(html).toContain('@media (prefers-reduced-motion:reduce)');
+    expect(html).toContain("layer.setAttribute('aria-hidden','true')");
+  });
+
+  it('emits the celebration exactly once when the streamed verdict first becomes correct', async () => {
+    const { JudgeViewProvider } = await import('../../src/webview.js');
+    const messages: Array<{ celebrateCorrect?: boolean }> = [];
+    const webview = {
+      options: {}, html: '',
+      onDidReceiveMessage: () => ({ dispose() {} }),
+      postMessage: async (message: { celebrateCorrect?: boolean }) => { messages.push(message); return true; }
+    };
+    const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {});
+    provider.resolveWebviewView({ webview } as never);
+    provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: {}, attempt: 1 });
+    provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: { verdict: 'correct' }, attempt: 1 });
+    provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: { verdict: 'correct', summary: '仍在输出' }, attempt: 1 });
+    expect(messages.map(message => message.celebrateCorrect)).toEqual([true, false]);
+    provider.dispose();
+  });
 });
