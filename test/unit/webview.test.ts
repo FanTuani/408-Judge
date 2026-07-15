@@ -37,4 +37,15 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('id="conclusion"');
     expect(html).not.toContain('{&quot;verdict&quot;');
   });
+
+  it('does not show an explanatory banner when thinking is disabled', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', reasoning: '', content: '',
+      preview: {}, attempt: 1, thinkingEnabled: false
+    }, 'nonce');
+    expect(html).not.toContain('当前为关闭思考模式');
+    expect(html).not.toContain('思考过程');
+    expect(html).toContain('判题结论');
+  });
 });
