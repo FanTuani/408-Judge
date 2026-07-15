@@ -1,12 +1,11 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ApiError, reviewWithDeepSeek, type FetchLike, type ThinkingLevel } from './api.js';
+import { API_KEY_SECRET, ApiKeyStore } from './apiKey.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
 import { requestThinkingSummary, ThinkingSummaryScheduler, ThinkingSummaryTracker } from './thinkingSummary.js';
 import { JudgeViewProvider, type ViewState } from './webview.js';
-
-const SECRET_KEY = 'deepseekJudge.apiKey';
 
 export interface ExtensionTestApi {
   getState(): ViewState;
@@ -20,9 +19,11 @@ class JudgeController implements vscode.Disposable {
   private requestId = 0;
   private activeAbort?: AbortController;
   private sourceUri?: vscode.Uri;
+  private readonly apiKeys: ApiKeyStore;
   readonly view: JudgeViewProvider;
 
   constructor(private readonly context: vscode.ExtensionContext, private readonly fetcher: FetchLike = (input, init) => fetch(input, init)) {
+    this.apiKeys = new ApiKeyStore(context.secrets, options => vscode.window.showInputBox(options));
     this.view = new JudgeViewProvider(
       context.extensionUri,
       () => void vscode.commands.executeCommand('deepseekJudge.reviewCurrent'),
@@ -32,21 +33,14 @@ class JudgeController implements vscode.Disposable {
   }
 
   async setApiKey(): Promise<boolean> {
-    const value = await vscode.window.showInputBox({
-      title: '设置 DeepSeek API Key',
-      prompt: 'API Key 将安全保存在 VS Code SecretStorage 中',
-      password: true,
-      ignoreFocusOut: true,
-      placeHolder: 'sk-…'
-    });
-    if (!value?.trim()) return false;
-    await this.context.secrets.store(SECRET_KEY, value.trim());
+    const value = await this.apiKeys.promptAndStore();
+    if (!value) return false;
     void vscode.window.showInformationMessage('DeepSeek API Key 已安全保存。');
     return true;
   }
 
   async clearApiKey(): Promise<void> {
-    await this.context.secrets.delete(SECRET_KEY);
+    await this.apiKeys.clear();
     void vscode.window.showInformationMessage('DeepSeek API Key 已清除。');
   }
 
@@ -77,13 +71,9 @@ class JudgeController implements vscode.Disposable {
 
     this.sourceUri = editor.document.uri;
     const fileName = path.basename(pair.cppPath);
-    let apiKey = await this.context.secrets.get(SECRET_KEY);
-    if (!apiKey) {
-      const stored = await this.setApiKey();
-      if (!stored) return this.fail(id, '未设置 DeepSeek API Key，评审未发送。');
-      apiKey = await this.context.secrets.get(SECRET_KEY);
-    }
-    if (!apiKey || id !== this.requestId) return;
+    const apiKey = await this.apiKeys.getOrPromptForReview();
+    if (!apiKey) return this.fail(id, '未设置 DeepSeek API Key，评审未发送。');
+    if (id !== this.requestId) return;
     const confirmedApiKey = apiKey;
 
     const config = vscode.workspace.getConfiguration('deepseekJudge');
@@ -200,8 +190,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionTestApi {
     getState: () => controller.view.getState(),
     getActiveRequestId: () => controller.getActiveRequestId(),
     openLine: line => controller.openLine(line),
-    storeApiKeyForTest: async value => { await context.secrets.store(SECRET_KEY, value); },
-    getApiKeyForTest: async () => context.secrets.get(SECRET_KEY)
+    storeApiKeyForTest: async value => { await context.secrets.store(API_KEY_SECRET, value); },
+    getApiKeyForTest: async () => context.secrets.get(API_KEY_SECRET)
   };
 }
 
