@@ -1,4 +1,5 @@
-import { normalizeJudgeResult, type JudgeResult } from './types.js';
+import { StreamingJudgeParser } from './streamingJson.js';
+import { normalizeJudgePreview, normalizeJudgeResult, type JudgePreview, type JudgeResult } from './types.js';
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 export type ThinkingLevel = 'disabled' | 'high' | 'max';
@@ -19,6 +20,7 @@ export interface StreamProgress {
   reasoning: string;
   content: string;
   attempt: number;
+  preview: JudgePreview;
 }
 
 export type ApiErrorCode = 'auth' | 'rate_limit' | 'timeout' | 'cancelled' | 'empty' | 'truncated' | 'invalid_json' | 'http' | 'network';
@@ -52,10 +54,11 @@ function linkedSignal(external: AbortSignal | undefined, timeoutMs: number): { s
 interface StreamAccumulator {
   reasoning: string;
   content: string;
+  preview: JudgePreview;
   finishReason?: string;
 }
 
-function consumeSseEvent(rawEvent: string, accumulator: StreamAccumulator, request: DeepSeekRequest, attempt: number): boolean {
+function consumeSseEvent(rawEvent: string, accumulator: StreamAccumulator, previewParser: StreamingJudgeParser, request: DeepSeekRequest, attempt: number): boolean {
   const data = rawEvent.split(/\r?\n/)
     .filter(line => line.startsWith('data:'))
     .map(line => line.slice(5).trimStart())
@@ -71,15 +74,19 @@ function consumeSseEvent(rawEvent: string, accumulator: StreamAccumulator, reque
   }
   const choice = envelope.choices?.[0];
   if (typeof choice?.delta?.reasoning_content === 'string') accumulator.reasoning += choice.delta.reasoning_content;
-  if (typeof choice?.delta?.content === 'string') accumulator.content += choice.delta.content;
+  if (typeof choice?.delta?.content === 'string') {
+    accumulator.content += choice.delta.content;
+    accumulator.preview = previewParser.write(choice.delta.content);
+  }
   if (choice?.finish_reason) accumulator.finishReason = choice.finish_reason;
-  request.onStream?.({ reasoning: accumulator.reasoning, content: accumulator.content, attempt });
+  request.onStream?.({ reasoning: accumulator.reasoning, content: accumulator.content, attempt, preview: accumulator.preview });
   return false;
 }
 
 async function readSse(response: Response, request: DeepSeekRequest, attempt: number): Promise<StreamAccumulator> {
   if (!response.body) throw new ApiError('empty', 'DeepSeek 返回了空响应流，已无法完成评审。', true);
-  const accumulator: StreamAccumulator = { reasoning: '', content: '' };
+  const accumulator: StreamAccumulator = { reasoning: '', content: '', preview: {} };
+  const previewParser = new StreamingJudgeParser();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -90,11 +97,11 @@ async function readSse(response: Response, request: DeepSeekRequest, attempt: nu
     const events = buffer.split(/\r?\n\r?\n/);
     buffer = events.pop() ?? '';
     for (const event of events) {
-      if (consumeSseEvent(event, accumulator, request, attempt)) { doneEvent = true; break; }
+      if (consumeSseEvent(event, accumulator, previewParser, request, attempt)) { doneEvent = true; break; }
     }
     if (chunk.done) break;
   }
-  if (!doneEvent && buffer.trim()) consumeSseEvent(buffer, accumulator, request, attempt);
+  if (!doneEvent && buffer.trim()) consumeSseEvent(buffer, accumulator, previewParser, request, attempt);
   return accumulator;
 }
 
@@ -111,9 +118,11 @@ async function readJsonResponse(response: Response, request: DeepSeekRequest, at
   const accumulator = {
     reasoning: choice?.message?.reasoning_content ?? '',
     content: choice?.message?.content ?? '',
+    preview: {} as JudgePreview,
     finishReason: choice?.finish_reason
   };
-  request.onStream?.({ reasoning: accumulator.reasoning, content: accumulator.content, attempt });
+  try { accumulator.preview = normalizeJudgePreview(JSON.parse(accumulator.content)); } catch { /* strict parse below owns the error */ }
+  request.onStream?.({ reasoning: accumulator.reasoning, content: accumulator.content, attempt, preview: accumulator.preview });
   return accumulator;
 }
 
@@ -165,7 +174,7 @@ async function requestOnce(request: DeepSeekRequest, fetcher: FetchLike, attempt
 /** Empty or invalid JSON responses are retried exactly once. */
 export async function reviewWithDeepSeek(request: DeepSeekRequest, fetcher: FetchLike = fetch): Promise<JudgeResult> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    request.onStream?.({ reasoning: '', content: '', attempt: attempt + 1 });
+    request.onStream?.({ reasoning: '', content: '', attempt: attempt + 1, preview: {} });
     try {
       return await requestOnce(request, fetcher, attempt + 1);
     } catch (error) {

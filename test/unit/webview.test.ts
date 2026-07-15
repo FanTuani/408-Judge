@@ -24,4 +24,17 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('<div class="diff-line');
     expect(html).not.toContain('<code>−');
   });
+
+  it('renders a structured partial result instead of raw streaming JSON', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', reasoning: '检查返回值', content: '{"verdict":',
+      preview: { verdict: 'incorrect', summary: '返回值仍在生成' }, attempt: 1, thinkingEnabled: true
+    }, 'nonce');
+    expect(html).toContain('id="structured-preview"');
+    expect(html).toContain('返回值仍在生成');
+    expect(html).toContain('错误');
+    expect(html).not.toContain('id="conclusion"');
+    expect(html).not.toContain('{&quot;verdict&quot;');
+  });
 });

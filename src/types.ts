@@ -29,6 +29,17 @@ export interface JudgeResult {
   };
 }
 
+export interface JudgePreview {
+  verdict?: Verdict;
+  summary?: string;
+  confidence?: number;
+  strengths?: string[];
+  issues?: Array<Partial<JudgeIssue>>;
+  complexity?: Partial<JudgeResult['complexity']>;
+  suggestedSnippet?: string;
+  suggestedFix?: Partial<NonNullable<JudgeResult['suggestedFix']>>;
+}
+
 const verdicts = new Set<Verdict>(['correct', 'partially_correct', 'incorrect', 'insufficient']);
 
 function text(value: unknown, fallback = ''): string {
@@ -37,6 +48,49 @@ function text(value: unknown, fallback = ''): string {
 
 function texts(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/** Sanitize an incomplete streaming object without inventing missing fields. */
+export function normalizeJudgePreview(value: unknown): JudgePreview {
+  if (!value || typeof value !== 'object') return {};
+  const root = value as Record<string, unknown>;
+  const preview: JudgePreview = {};
+  if (typeof root.verdict === 'string' && verdicts.has(root.verdict as Verdict)) preview.verdict = root.verdict as Verdict;
+  if (typeof root.summary === 'string') preview.summary = root.summary;
+  if (typeof root.confidence === 'number' && Number.isFinite(root.confidence)) preview.confidence = Math.max(0, Math.min(1, root.confidence));
+  if (Array.isArray(root.strengths)) preview.strengths = texts(root.strengths);
+  if (Array.isArray(root.issues)) {
+    preview.issues = root.issues.flatMap(item => {
+      if (!item || typeof item !== 'object') return [];
+      const raw = item as Record<string, unknown>;
+      const issue: Partial<JudgeIssue> = {};
+      for (const key of ['severity', 'title', 'description', 'suggestion'] as const) {
+        if (typeof raw[key] === 'string') issue[key] = raw[key];
+      }
+      if (typeof raw.line === 'number' && Number.isInteger(raw.line) && raw.line > 0) issue.line = raw.line;
+      return [issue];
+    });
+  }
+  if (root.complexity && typeof root.complexity === 'object') {
+    const raw = root.complexity as Record<string, unknown>;
+    preview.complexity = {};
+    for (const key of ['time', 'space', 'assessment'] as const) {
+      if (typeof raw[key] === 'string') preview.complexity[key] = raw[key];
+    }
+  }
+  if (typeof root.suggestedSnippet === 'string') preview.suggestedSnippet = root.suggestedSnippet;
+  if (root.suggestedFix && typeof root.suggestedFix === 'object') {
+    const raw = root.suggestedFix as Record<string, unknown>;
+    const fix: NonNullable<JudgePreview['suggestedFix']> = {};
+    for (const key of ['original', 'replacement', 'explanation'] as const) {
+      if (typeof raw[key] === 'string') fix[key] = raw[key];
+    }
+    for (const key of ['startLine', 'endLine'] as const) {
+      if (typeof raw[key] === 'number' && Number.isInteger(raw[key]) && raw[key] > 0) fix[key] = raw[key];
+    }
+    preview.suggestedFix = fix;
+  }
+  return preview;
 }
 
 /** Convert loosely valid model JSON into a safe, complete object for rendering. */

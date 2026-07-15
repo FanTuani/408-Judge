@@ -7,6 +7,7 @@ interface TestState {
   kind: 'idle' | 'loading' | 'result' | 'error';
   reasoning?: string;
   content?: string;
+  preview?: { summary?: string };
   result?: { verdict: string };
 }
 interface ExtensionTestApi {
@@ -78,8 +79,12 @@ suite('408 Judge extension', () => {
         start(controller) {
           controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"正在检查边界"}}]}\n\n'));
           setTimeout(() => {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
-            controller.close();
+            const split = resultJson.indexOf('整体可行') + 2;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(0, split) }, finish_reason: null }] })}\n\n`));
+            setTimeout(() => {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(split) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
+              controller.close();
+            }, 100);
           }, 80);
         }
       });
@@ -92,6 +97,7 @@ suite('408 Judge extension', () => {
     const firstId = api.getActiveRequestId();
     const second = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().reasoning === '正在检查边界', 'streamed reasoning was not rendered');
+    await waitFor(() => api.getState().kind === 'loading' && api.getState().preview?.summary === '整体', 'structured conclusion was not rendered incrementally');
     await Promise.all([first, second]);
 
     assert.equal(api.getActiveRequestId(), firstId + 1);

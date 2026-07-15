@@ -95,7 +95,7 @@ class JudgeController implements vscode.Disposable {
       ? configuredLevel
       : 'high';
     const thinkingEnabled = thinkingLevel !== 'disabled';
-    this.view.setState({ kind: 'loading', fileName, reasoning: '', content: '', attempt: 1, thinkingEnabled });
+    this.view.setState({ kind: 'loading', fileName, source: pair.cppContent, reasoning: '', content: '', preview: {}, attempt: 1, thinkingEnabled });
     void vscode.commands.executeCommand('deepseekJudge.resultsView.focus');
 
     try {
@@ -110,7 +110,7 @@ class JudgeController implements vscode.Disposable {
         signal: abort.signal,
         onStream: progress => {
           if (id === this.requestId) this.view.setState({
-            kind: 'loading', fileName, reasoning: progress.reasoning, content: progress.content, attempt: progress.attempt, thinkingEnabled
+            kind: 'loading', fileName, source: pair.cppContent, reasoning: progress.reasoning, content: progress.content, preview: progress.preview, attempt: progress.attempt, thinkingEnabled
           });
         }
       }, this.fetcher);
