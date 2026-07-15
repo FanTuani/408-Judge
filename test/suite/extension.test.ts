@@ -63,10 +63,16 @@ suite('408 Judge extension', () => {
     const document = await vscode.workspace.openTextDocument(fixture);
     await vscode.window.showTextDocument(document);
 
-    let call = 0;
+    let mainCall = 0;
     globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {
-      call += 1;
-      if (call === 1) {
+      const requestBody = JSON.parse(String(init?.body)) as { model?: string; thinking?: { type?: string } };
+      if (requestBody.model === 'deepseek-v4-flash' && requestBody.thinking?.type === 'disabled') {
+        return Promise.resolve(new Response(JSON.stringify({
+          choices: [{ message: { content: '{"summary":"正在检查边界条件与内存安全"}' }, finish_reason: 'stop' }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      mainCall += 1;
+      if (mainCall === 1) {
         return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }));
       }
       const encoder = new TextEncoder();
@@ -87,7 +93,7 @@ suite('408 Judge extension', () => {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(split) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
                 controller.close();
               }, 100);
-            }, 100);
+            }, 1_250);
           }, 850);
         }
       });
@@ -96,7 +102,7 @@ suite('408 Judge extension', () => {
 
     const first = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
     await waitFor(() => api.getState().kind === 'loading', 'first request did not start');
-    await waitFor(() => call === 1, 'first network request did not start');
+    await waitFor(() => mainCall === 1, 'first network request did not start');
     const firstId = api.getActiveRequestId();
     const second = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === '正在检查边界条件与内存安全', 'thinking summary was not updated');

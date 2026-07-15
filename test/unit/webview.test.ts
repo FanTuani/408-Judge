@@ -61,4 +61,18 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('思考过程');
     expect(html).not.toContain('id="reasoning"');
   });
+
+  it('forces hidden streaming indicators out of layout after thinking completes', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({
+      kind: 'result', fileName: 'answer.cpp', source: 'return 0;',
+      thinkingStatus: { label: '思考完成', complete: true, elapsedMs: 21000, attempt: 1 },
+      result: {
+        verdict: 'correct', summary: '正确', confidence: 1, strengths: [], issues: [],
+        complexity: { time: 'O(1)', space: 'O(1)', assessment: '合理' }, suggestedSnippet: ''
+      }
+    }, 'nonce');
+    expect(html).toContain('id="thinking-spinner" class="spinner" hidden');
+    expect(html).toContain('[hidden]{display:none!important}');
+  });
 });

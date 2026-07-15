@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { ApiError, reviewWithDeepSeek, type FetchLike, type ThinkingLevel } from './api.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
-import { ThinkingSummaryTracker } from './thinkingSummary.js';
+import { requestThinkingSummary, ThinkingSummaryScheduler, ThinkingSummaryTracker } from './thinkingSummary.js';
 import { JudgeViewProvider, type ViewState } from './webview.js';
 
 const SECRET_KEY = 'deepseekJudge.apiKey';
@@ -97,8 +97,31 @@ class JudgeController implements vscode.Disposable {
       : 'high';
     const thinkingEnabled = thinkingLevel !== 'disabled';
     const thinkingStartedAt = Date.now();
-    const thinkingTracker = new ThinkingSummaryTracker(800, thinkingStartedAt);
-    const initialThinkingStatus = thinkingEnabled ? thinkingTracker.update('', '', 1, thinkingStartedAt) : undefined;
+    const thinkingTracker = new ThinkingSummaryTracker(thinkingStartedAt);
+    const initialThinkingStatus = thinkingEnabled ? thinkingTracker.update('', 1, thinkingStartedAt) : undefined;
+    let latestProgress = { reasoning: '', content: '', preview: {}, attempt: 1 };
+    const thinkingSummaryScheduler = thinkingEnabled
+      ? new ThinkingSummaryScheduler(
+        (reasoning, previousSummary, signal) => requestThinkingSummary({
+          apiKey: confirmedApiKey,
+          baseUrl: config.get('apiBaseUrl', 'https://api.deepseek.com'),
+          model: config.get('thinkingSummaryModel', 'deepseek-v4-flash'),
+          reasoning,
+          previousSummary,
+          timeoutSeconds: Math.min(15, config.get('requestTimeoutSeconds', 90)),
+          signal
+        }, this.fetcher),
+        (summary, attempt) => {
+          if (id !== this.requestId || latestProgress.content.length > 0 || attempt !== latestProgress.attempt) return;
+          const thinkingStatus = thinkingTracker.applySummary(summary, attempt);
+          this.view.setState({
+            kind: 'loading', fileName, source: pair.cppContent, preview: latestProgress.preview, attempt,
+            thinkingStatus
+          });
+        },
+        { signal: abort.signal }
+      )
+      : undefined;
     this.view.setState({ kind: 'loading', fileName, source: pair.cppContent, preview: {}, attempt: 1, ...(initialThinkingStatus ? { thinkingStatus: initialThinkingStatus } : {}) });
     void vscode.commands.executeCommand('deepseekJudge.resultsView.focus');
 
@@ -114,8 +137,11 @@ class JudgeController implements vscode.Disposable {
         signal: abort.signal,
         onStream: progress => {
           if (id === this.requestId) {
+            latestProgress = progress;
+            if (progress.content.length > 0) thinkingSummaryScheduler?.dispose();
+            else thinkingSummaryScheduler?.update(progress.reasoning, progress.attempt);
             const thinkingStatus = thinkingEnabled
-              ? thinkingTracker.update(progress.reasoning, progress.content, progress.attempt)
+              ? thinkingTracker.update(progress.content, progress.attempt)
               : undefined;
             this.view.setState({
               kind: 'loading', fileName, source: pair.cppContent, preview: progress.preview, attempt: progress.attempt,
@@ -125,14 +151,17 @@ class JudgeController implements vscode.Disposable {
         }
       }, this.fetcher);
       if (id === this.requestId) {
+        thinkingSummaryScheduler?.dispose();
         const thinkingStatus = thinkingEnabled ? thinkingTracker.finish() : undefined;
         this.view.setState({ kind: 'result', fileName, source: pair.cppContent, result, ...(thinkingStatus ? { thinkingStatus } : {}) });
       }
     } catch (error) {
+      thinkingSummaryScheduler?.dispose();
       if (id !== this.requestId) return;
       const message = error instanceof ApiError ? error.message : '评审过程中发生未知错误。';
       this.view.setState({ kind: 'error', message });
     } finally {
+      thinkingSummaryScheduler?.dispose();
       if (id === this.requestId) this.activeAbort = undefined;
     }
   }

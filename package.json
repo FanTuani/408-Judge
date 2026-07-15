@@ -2,7 +2,7 @@
   "name": "408-judge",
   "displayName": "408 Judge",
   "description": "使用 DeepSeek 在侧边栏评审当前 408 C++ 题解",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "local-408",
   "private": true,
   "license": "MIT",
@@ -104,6 +104,11 @@
           ],
           "default": "high",
           "description": "DeepSeek 官方思考模式等级：关闭、高强度或最大强度。"
+        },
+        "deepseekJudge.thinkingSummaryModel": {
+          "type": "string",
+          "default": "deepseek-v4-flash",
+          "description": "用于生成单行思考状态摘要的模型；请求始终关闭思考且不影响主判题。"
         },
         "deepseekJudge.additionalPrompt": {
           "type": "string",

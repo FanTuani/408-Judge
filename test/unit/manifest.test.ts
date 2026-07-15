@@ -9,4 +9,9 @@ describe('extension settings manifest', () => {
     expect(setting.enumDescriptions).toHaveLength(3);
     expect(setting.default).toBe('high');
   });
+
+  it('uses the official Flash model for sidecar thinking summaries', () => {
+    const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    expect(manifest.contributes.configuration.properties['deepseekJudge.thinkingSummaryModel'].default).toBe('deepseek-v4-flash');
+  });
 });
