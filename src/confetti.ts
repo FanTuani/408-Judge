@@ -8,7 +8,23 @@ declare global {
 
 /** A stronger Basic Cannon fired straight up from the center of the view. */
 window.launchJudgeConfetti = () => {
-  void confetti({
+  const canvas = document.createElement('canvas');
+  canvas.setAttribute('aria-hidden', 'true');
+  Object.assign(canvas.style, {
+    position: 'fixed',
+    inset: '0',
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    zIndex: '1000'
+  });
+  document.body.appendChild(canvas);
+  const cannon = confetti.create(canvas, {
+    resize: true,
+    useWorker: false,
+    disableForReducedMotion: true
+  });
+  const animation = cannon({
     particleCount: 160,
     angle: 90,
     spread: 82,
@@ -21,4 +37,6 @@ window.launchJudgeConfetti = () => {
     zIndex: 1000,
     disableForReducedMotion: true
   });
+  if (animation) void animation.finally(() => canvas.remove());
+  else canvas.remove();
 };
