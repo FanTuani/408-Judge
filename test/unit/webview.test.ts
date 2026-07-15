@@ -113,4 +113,27 @@ describe('diff webview markup', () => {
     expect(messages.map(message => message.celebrateCorrect)).toEqual([true, false]);
     provider.dispose();
   });
+
+  it('places the thinking-level selector below review and persists valid changes', async () => {
+    const { JudgeViewProvider, renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({ kind: 'error', message: '网络错误' }, 'nonce', false, '', '', 'max');
+    expect(html.indexOf('id="review"')).toBeLessThan(html.indexOf('id="thinking-level"'));
+    expect(html).toContain('<option value="max" selected>思考：最大强度</option>');
+
+    let receiver: ((message: unknown) => void) | undefined;
+    const changed = vi.fn();
+    const webview = {
+      options: {}, html: '', cspSource: 'vscode-webview://unit-test',
+      asWebviewUri: (uri: { toString(): string }) => uri,
+      onDidReceiveMessage: (listener: (message: unknown) => void) => { receiver = listener; return { dispose() {} }; },
+      postMessage: async () => true
+    };
+    const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {}, 'high', changed);
+    provider.resolveWebviewView({ webview } as never);
+    receiver?.({ type: 'setThinkingLevel', level: 'disabled' });
+    receiver?.({ type: 'setThinkingLevel', level: 'invalid' });
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith('disabled');
+    provider.dispose();
+  });
 });

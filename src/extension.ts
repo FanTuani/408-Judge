@@ -28,7 +28,9 @@ class JudgeController implements vscode.Disposable {
       context.extensionUri,
       () => void vscode.commands.executeCommand('deepseekJudge.reviewCurrent'),
       () => this.cancel(),
-      line => void this.openLine(line)
+      line => void this.openLine(line),
+      this.getThinkingLevel(),
+      level => this.updateThinkingLevel(level)
     );
   }
 
@@ -81,10 +83,7 @@ class JudgeController implements vscode.Disposable {
     const relativePath = workspaceFolder
       ? path.relative(workspaceFolder.uri.fsPath, pair.cppPath)
       : path.basename(pair.cppPath);
-    const configuredLevel = config.get<string>('thinkingLevel', 'high');
-    const thinkingLevel: ThinkingLevel = configuredLevel === 'disabled' || configuredLevel === 'high' || configuredLevel === 'max'
-      ? configuredLevel
-      : 'high';
+    const thinkingLevel = this.getThinkingLevel();
     const thinkingEnabled = thinkingLevel !== 'disabled';
     const thinkingStartedAt = Date.now();
     const thinkingTracker = new ThinkingSummaryTracker(thinkingStartedAt);
@@ -166,6 +165,26 @@ class JudgeController implements vscode.Disposable {
     editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
+  syncThinkingLevel(): void {
+    this.view.setThinkingLevel(this.getThinkingLevel());
+  }
+
+  private getThinkingLevel(): ThinkingLevel {
+    const configured = vscode.workspace.getConfiguration('deepseekJudge').get<string>('thinkingLevel', 'high');
+    return configured === 'disabled' || configured === 'high' || configured === 'max' ? configured : 'high';
+  }
+
+  private async updateThinkingLevel(level: ThinkingLevel): Promise<void> {
+    const config = vscode.workspace.getConfiguration('deepseekJudge');
+    const inspected = config.inspect<string>('thinkingLevel');
+    const target = inspected?.workspaceFolderValue !== undefined
+      ? vscode.ConfigurationTarget.WorkspaceFolder
+      : inspected?.workspaceValue !== undefined
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
+    await config.update('thinkingLevel', level, target);
+  }
+
   private fail(id: number, message: string): void {
     if (id === this.requestId) {
       this.activeAbort = undefined;
@@ -182,6 +201,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionTestApi {
   context.subscriptions.push(
     controller,
     vscode.window.registerWebviewViewProvider('deepseekJudge.resultsView', controller.view, { webviewOptions: { retainContextWhenHidden: true } }),
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration('deepseekJudge.thinkingLevel')) controller.syncThinkingLevel();
+    }),
     vscode.commands.registerCommand('deepseekJudge.reviewCurrent', () => controller.reviewCurrent()),
     vscode.commands.registerCommand('deepseekJudge.setApiKey', () => controller.setApiKey()),
     vscode.commands.registerCommand('deepseekJudge.clearApiKey', () => controller.clearApiKey())
