@@ -7,7 +7,7 @@
 1. 确保作答与讲解同名，例如 `tree.cpp` / `tree.md` 或 `tree_exam_2024.cpp` / `tree_exam_2024.md`。
 2. 打开 `.cpp`（无需先保存最新修改），在编辑器中右键选择“408 Judge: 评审当前 C++ 作答”，或从命令面板执行同名命令。
 3. 首次使用时输入 DeepSeek API Key。它只存入 VS Code SecretStorage，不写入设置、日志或错误信息。
-4. 在 Activity Bar 的 “408 Judge” 中查看类似 ChatGPT 的单行思考摘要：初始为 `Thinking`，随后由关闭思考的 Flash 模型概括当前阶段，完成后显示用时；不展示原始思维链。结论 JSON 到达时会被增量解析，直接更新 verdict、总体评价、正确之处、问题、复杂度和最小修复，无需等待整个响应结束。带行号的问题可点击回到源码。
+4. 在 Activity Bar 的 “408 Judge” 中查看类似 ChatGPT 的单行思考摘要：初始为 `Thinking`，随后由关闭思考的 Flash 模型概括当前阶段；首次收到结论时显示并冻结思考用时，不展示原始思维链。结论 JSON 到达时会被增量解析，直接更新 verdict、总体评价、正确之处、问题、复杂度和最小修复，无需等待整个响应结束。带行号的问题可点击回到源码。
 
 必要的局部修正会要求模型同时返回原始代码块与最小连续行替换。扩展先在源码中精确定位原始块，再消除首尾未改变的行，以标准统一 diff 展示删除行、增加行和少量上下文；不会直接修改源码。
 
@@ -47,7 +47,7 @@ npm run package
 安装生成的 VSIX：
 
 ```sh
-code --install-extension ./408-judge-0.10.0.vsix
+code --install-extension ./408-judge-0.10.1.vsix
 ```
 
 本项目仅生成本地 VSIX，不包含 Marketplace 发布流程。`fixtures/` 均为原创最小测试数据，不包含教材 PDF 或真实题库内容。

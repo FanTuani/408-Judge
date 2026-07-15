@@ -196,6 +196,7 @@ export class ThinkingSummaryTracker {
   private startedAt: number;
   private label = 'Thinking';
   private complete = false;
+  private completedElapsedMs?: number;
 
   constructor(now = Date.now(), attempt = 1) {
     this.attempt = attempt;
@@ -215,8 +216,11 @@ export class ThinkingSummaryTracker {
   }
 
   finish(now = Date.now()): ThinkingStatus {
-    this.complete = true;
-    this.label = '思考完成';
+    if (!this.complete) {
+      this.complete = true;
+      this.label = '思考完成';
+      this.completedElapsedMs = Math.max(0, now - this.startedAt);
+    }
     return this.status(now);
   }
 
@@ -225,9 +229,11 @@ export class ThinkingSummaryTracker {
     this.startedAt = now;
     this.label = 'Thinking';
     this.complete = false;
+    this.completedElapsedMs = undefined;
   }
 
   private status(now: number): ThinkingStatus {
-    return { label: this.label, complete: this.complete, elapsedMs: Math.max(0, now - this.startedAt), attempt: this.attempt };
+    const elapsedMs = this.completedElapsedMs ?? Math.max(0, now - this.startedAt);
+    return { label: this.label, complete: this.complete, elapsedMs, attempt: this.attempt };
   }
 }

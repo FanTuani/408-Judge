@@ -67,6 +67,8 @@ describe('thinking summary', () => {
     expect(tracker.update('', 1, 1_500).label).toBe('Thinking');
     expect(tracker.applySummary('正在检查循环边界', 1, 1_800).label).toBe('正在检查循环边界');
     expect(tracker.update('{', 1, 2_700)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
+    expect(tracker.update('{"verdict"', 1, 8_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
+    expect(tracker.finish(12_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
     expect(tracker.update('', 2, 3_000)).toMatchObject({ label: 'Thinking', complete: false, elapsedMs: 0, attempt: 2 });
   });
 });
