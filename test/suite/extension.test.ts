@@ -77,7 +77,7 @@ suite('408 Judge extension', () => {
       }
       const encoder = new TextEncoder();
       const resultJson = JSON.stringify({
-        verdict: 'partially_correct', summary: '整体可行，但需检查边界。', confidence: 0.8,
+        verdict: 'partially_correct', summary: '整体可行，但需检查边界。',
         strengths: ['线性扫描正确'], issues: [{ severity: 'warning', title: '前置条件', description: '空数组未处理', line: 2, suggestion: '明确 n > 0' }],
         complexity: { time: 'O(n)', space: 'O(1)', assessment: '符合要求' }, suggestedSnippet: ''
       });
@@ -105,7 +105,7 @@ suite('408 Judge extension', () => {
     await waitFor(() => mainCall === 1, 'first network request did not start');
     const firstId = api.getActiveRequestId();
     const second = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
-    await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === '正在检查边界条件与内存安全', 'thinking summary was not updated');
+    await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === '检查边界条件与内存安全', 'thinking summary was not updated');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().preview?.summary === '整体', 'structured conclusion was not rendered incrementally');
     await Promise.all([first, second]);
 

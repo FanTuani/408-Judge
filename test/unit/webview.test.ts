@@ -12,7 +12,7 @@ describe('diff webview markup', () => {
       fileName: 'answer.cpp',
       source: 'int x = 0;\nreturn x;',
       result: {
-        verdict: 'incorrect', summary: '需修复', confidence: 0.9, strengths: [], issues: [],
+        verdict: 'incorrect', summary: '需修复', strengths: [], issues: [],
         complexity: { time: 'O(1)', space: 'O(1)', assessment: '不变' },
         suggestedSnippet: 'return 1;',
         suggestedFix: {
@@ -32,11 +32,13 @@ describe('diff webview markup', () => {
     const html = renderWebview({
       kind: 'loading', fileName: 'answer.cpp', source: 'return 0;',
       preview: { verdict: 'incorrect', summary: '返回值仍在生成' }, attempt: 1,
-      thinkingStatus: { label: '正在核对算法逻辑', complete: false, elapsedMs: 1200, attempt: 1 }
+      thinkingStatus: { label: '核对算法逻辑', stages: ['核对算法逻辑'], complete: false, elapsedMs: 1200, attempt: 1 }
     }, 'nonce');
     expect(html).toContain('id="structured-preview"');
     expect(html).toContain('返回值仍在生成');
     expect(html).toContain('错误');
+    expect(html).toContain('<ol id="thinking-stages" class="thinking-stages"><li>核对算法逻辑</li></ol>');
+    expect(html).toContain("document.createElement('li')");
     expect(html).not.toContain('class="caret"');
     expect(html).not.toContain('live-value');
     expect(html).not.toContain('id="conclusion"');
@@ -59,29 +61,34 @@ describe('diff webview markup', () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
       kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', preview: {}, attempt: 1,
-      thinkingStatus: { label: 'Thinking', complete: false, elapsedMs: 0, attempt: 1 }
+      thinkingStatus: { label: 'Thinking', stages: [], complete: false, elapsedMs: 0, attempt: 1 }
     }, 'nonce');
-    expect(html).toContain('id="thinking-label">Thinking');
+    expect(html).toContain('data-complete="false">Thinking · 0 秒');
     expect(html).not.toContain('思考过程');
     expect(html).not.toContain('id="reasoning"');
+    expect(html).toContain('Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)');
+    expect(html).toContain('if(event.data.thinkingComplete)stages?.remove()');
   });
 
   it('forces hidden streaming indicators out of layout after thinking completes', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
       kind: 'result', fileName: 'answer.cpp', source: 'return 0;',
-      thinkingStatus: { label: '思考完成', complete: true, elapsedMs: 21000, attempt: 1 },
+      thinkingStatus: { label: '思考完成', stages: ['核对算法逻辑', '验证边界条件'], complete: true, elapsedMs: 21000, attempt: 1 },
       result: {
-        verdict: 'correct', summary: '正确', confidence: 1, strengths: [], issues: [],
+        verdict: 'correct', summary: '正确', strengths: [], issues: [],
         complexity: { time: 'O(1)', space: 'O(1)', assessment: '合理' }, suggestedSnippet: ''
       }
     }, 'nonce');
     expect(html).toContain('id="thinking-spinner" class="spinner" hidden');
     expect(html).toContain('[hidden]{display:none!important}');
     expect(html).toContain('<section class="live-preview final-result">');
-    expect(html).toContain('<div class="thinking-toolbar"><div class="stream-status thinking-complete">');
+    expect(html).toContain('<div class="thinking-toolbar"><div class="thinking-block"><div class="stream-status thinking-complete">');
     expect(html.indexOf('id="thinking-label"')).toBeLessThan(html.indexOf('id="thinking-level"'));
     expect(html.indexOf('id="thinking-level"')).toBeGreaterThan(html.indexOf('</header>'));
+    expect(html).toContain('思考完成 · 21 秒');
+    expect(html).not.toContain('id="thinking-stages"');
+    expect(html).not.toContain('置信度');
   });
 
   it('loads the Basic Cannon bundle and can launch it during streaming', async () => {

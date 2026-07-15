@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { normalizeJudgeResult } from '../../src/types.js';
 
 describe('model JSON validation', () => {
-  it('accepts valid fields and clamps confidence', () => {
+  it('accepts valid fields without exposing model self-confidence', () => {
     const value = normalizeJudgeResult({ verdict: 'correct', confidence: 2, strengths: ['ok'], suggestedFix: { startLine: 3, endLine: 4, original: 'return 1;', replacement: 'return 0;', explanation: '最小替换' } });
     expect(value.verdict).toBe('correct');
-    expect(value.confidence).toBe(1);
+    expect(value).not.toHaveProperty('confidence');
     expect(value.strengths).toEqual(['ok']);
     expect(value.suggestedFix).toMatchObject({ startLine: 3, endLine: 4, replacement: 'return 0;' });
   });

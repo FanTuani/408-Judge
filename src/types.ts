@@ -11,7 +11,6 @@ export interface JudgeIssue {
 export interface JudgeResult {
   verdict: Verdict;
   summary: string;
-  confidence: number;
   strengths: string[];
   issues: JudgeIssue[];
   complexity: {
@@ -32,7 +31,6 @@ export interface JudgeResult {
 export interface JudgePreview {
   verdict?: Verdict;
   summary?: string;
-  confidence?: number;
   strengths?: string[];
   issues?: Array<Partial<JudgeIssue>>;
   complexity?: Partial<JudgeResult['complexity']>;
@@ -57,7 +55,6 @@ export function normalizeJudgePreview(value: unknown): JudgePreview {
   const preview: JudgePreview = {};
   if (typeof root.verdict === 'string' && verdicts.has(root.verdict as Verdict)) preview.verdict = root.verdict as Verdict;
   if (typeof root.summary === 'string') preview.summary = root.summary;
-  if (typeof root.confidence === 'number' && Number.isFinite(root.confidence)) preview.confidence = Math.max(0, Math.min(1, root.confidence));
   if (Array.isArray(root.strengths)) preview.strengths = texts(root.strengths);
   if (Array.isArray(root.issues)) {
     preview.issues = root.issues.flatMap(item => {
@@ -97,9 +94,6 @@ export function normalizeJudgePreview(value: unknown): JudgePreview {
 export function normalizeJudgeResult(value: unknown): JudgeResult {
   const root = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const rawVerdict = root.verdict;
-  const rawConfidence = typeof root.confidence === 'number' && Number.isFinite(root.confidence)
-    ? root.confidence
-    : 0;
   const rawIssues = Array.isArray(root.issues) ? root.issues : [];
   const rawComplexity = root.complexity && typeof root.complexity === 'object'
     ? root.complexity as Record<string, unknown>
@@ -121,7 +115,6 @@ export function normalizeJudgeResult(value: unknown): JudgeResult {
       ? rawVerdict as Verdict
       : 'insufficient',
     summary: text(root.summary, '模型未提供总体评价。'),
-    confidence: Math.max(0, Math.min(1, rawConfidence)),
     strengths: texts(root.strengths),
     issues: rawIssues.flatMap((item): JudgeIssue[] => {
       if (!item || typeof item !== 'object') return [];

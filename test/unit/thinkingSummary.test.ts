@@ -9,7 +9,8 @@ import {
 
 describe('thinking summary', () => {
   it('normalizes a short model-generated status instead of classifying keywords locally', () => {
-    expect(normalizeThinkingSummary(' **核对循环结束后的下标**。 ')).toBe('正在核对循环结束后的下标');
+    expect(normalizeThinkingSummary(' **核对循环结束后的下标**。 ')).toBe('核对循环结束后的下标');
+    expect(normalizeThinkingSummary('正在验证返回值')).toBe('验证返回值');
     expect(normalizeThinkingSummary('')).toBeUndefined();
     expect(normalizeThinkingSummary(42)).toBeUndefined();
   });
@@ -30,14 +31,14 @@ describe('thinking summary', () => {
       });
       expect(body.reasoning_effort).toBeUndefined();
       expect(String(init.body)).not.toContain('secret');
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"正在验证删除后的下标变化"}' } }] }), {
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"验证删除后的下标变化"}' } }] }), {
         status: 200, headers: { 'content-type': 'application/json' }
       });
     });
     await expect(requestThinkingSummary({
       apiKey: 'secret', baseUrl: 'https://example.test/', model: 'deepseek-v4-flash',
       reasoning: '分析循环', previousSummary: 'Thinking', timeoutSeconds: 1
-    }, fetcher)).resolves.toBe('正在验证删除后的下标变化');
+    }, fetcher)).resolves.toBe('验证删除后的下标变化');
     expect(fetcher).toHaveBeenCalledWith('https://example.test/chat/completions', expect.anything());
   });
 
@@ -64,11 +65,15 @@ describe('thinking summary', () => {
 
   it('tracks semantic labels, completes on answer content, and resets on retry', () => {
     const tracker = new ThinkingSummaryTracker(1_000);
-    expect(tracker.update('', 1, 1_500).label).toBe('Thinking');
-    expect(tracker.applySummary('正在检查循环边界', 1, 1_800).label).toBe('正在检查循环边界');
+    expect(tracker.update('', 1, 1_500)).toMatchObject({ label: 'Thinking', stages: [] });
+    expect(tracker.applySummary('检查循环边界', 1, 1_800)).toMatchObject({
+      label: '检查循环边界', stages: ['检查循环边界']
+    });
+    expect(tracker.applySummary('验证返回值', 1, 2_000).stages).toEqual(['检查循环边界', '验证返回值']);
+    expect(tracker.applySummary('检查循环边界', 1, 2_100).stages).toEqual(['检查循环边界', '验证返回值']);
     expect(tracker.update('{', 1, 2_700)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
     expect(tracker.update('{"verdict"', 1, 8_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
     expect(tracker.finish(12_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
-    expect(tracker.update('', 2, 3_000)).toMatchObject({ label: 'Thinking', complete: false, elapsedMs: 0, attempt: 2 });
+    expect(tracker.update('', 2, 3_000)).toMatchObject({ label: 'Thinking', stages: [], complete: false, elapsedMs: 0, attempt: 2 });
   });
 });

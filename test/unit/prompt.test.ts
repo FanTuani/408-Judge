@@ -39,6 +39,7 @@ describe('prompt construction', () => {
     expect(prompt).toContain('未提供同名 Markdown 参考讲解');
     expect(SYSTEM_PROMPT).toContain('不得仅因没有 Markdown 就直接判 insufficient');
     expect(SYSTEM_PROMPT).toContain('函数签名与名称');
-    expect(SYSTEM_PROMPT).toContain('适当降低 confidence');
+    expect(SYSTEM_PROMPT).toContain('关键假设和不确定性');
+    expect(SYSTEM_PROMPT).not.toContain('"confidence"');
   });
 });
