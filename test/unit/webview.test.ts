@@ -28,8 +28,9 @@ describe('diff webview markup', () => {
   it('renders a structured partial result instead of raw streaming JSON', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
-      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', reasoning: '检查返回值', content: '{"verdict":',
-      preview: { verdict: 'incorrect', summary: '返回值仍在生成' }, attempt: 1, thinkingEnabled: true
+      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;',
+      preview: { verdict: 'incorrect', summary: '返回值仍在生成' }, attempt: 1,
+      thinkingStatus: { label: '正在核对算法逻辑', complete: false, elapsedMs: 1200, attempt: 1 }
     }, 'nonce');
     expect(html).toContain('id="structured-preview"');
     expect(html).toContain('返回值仍在生成');
@@ -43,11 +44,21 @@ describe('diff webview markup', () => {
   it('does not show an explanatory banner when thinking is disabled', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
-      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', reasoning: '', content: '',
-      preview: {}, attempt: 1, thinkingEnabled: false
+      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', preview: {}, attempt: 1
     }, 'nonce');
     expect(html).not.toContain('当前为关闭思考模式');
     expect(html).not.toContain('思考过程');
     expect(html).toContain('判题结论');
+  });
+
+  it('shows a compact thinking summary instead of raw reasoning', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', preview: {}, attempt: 1,
+      thinkingStatus: { label: 'Thinking', complete: false, elapsedMs: 0, attempt: 1 }
+    }, 'nonce');
+    expect(html).toContain('id="thinking-label">Thinking');
+    expect(html).not.toContain('思考过程');
+    expect(html).not.toContain('id="reasoning"');
   });
 });

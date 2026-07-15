@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ApiError, reviewWithDeepSeek, type FetchLike, type ThinkingLevel } from './api.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
+import { ThinkingSummaryTracker } from './thinkingSummary.js';
 import { JudgeViewProvider, type ViewState } from './webview.js';
 
 const SECRET_KEY = 'deepseekJudge.apiKey';
@@ -95,7 +96,10 @@ class JudgeController implements vscode.Disposable {
       ? configuredLevel
       : 'high';
     const thinkingEnabled = thinkingLevel !== 'disabled';
-    this.view.setState({ kind: 'loading', fileName, source: pair.cppContent, reasoning: '', content: '', preview: {}, attempt: 1, thinkingEnabled });
+    const thinkingStartedAt = Date.now();
+    const thinkingTracker = new ThinkingSummaryTracker(800, thinkingStartedAt);
+    const initialThinkingStatus = thinkingEnabled ? thinkingTracker.update('', '', 1, thinkingStartedAt) : undefined;
+    this.view.setState({ kind: 'loading', fileName, source: pair.cppContent, preview: {}, attempt: 1, ...(initialThinkingStatus ? { thinkingStatus: initialThinkingStatus } : {}) });
     void vscode.commands.executeCommand('deepseekJudge.resultsView.focus');
 
     try {
@@ -109,12 +113,21 @@ class JudgeController implements vscode.Disposable {
         timeoutSeconds: config.get('requestTimeoutSeconds', 90),
         signal: abort.signal,
         onStream: progress => {
-          if (id === this.requestId) this.view.setState({
-            kind: 'loading', fileName, source: pair.cppContent, reasoning: progress.reasoning, content: progress.content, preview: progress.preview, attempt: progress.attempt, thinkingEnabled
-          });
+          if (id === this.requestId) {
+            const thinkingStatus = thinkingEnabled
+              ? thinkingTracker.update(progress.reasoning, progress.content, progress.attempt)
+              : undefined;
+            this.view.setState({
+              kind: 'loading', fileName, source: pair.cppContent, preview: progress.preview, attempt: progress.attempt,
+              ...(thinkingStatus ? { thinkingStatus } : {})
+            });
+          }
         }
       }, this.fetcher);
-      if (id === this.requestId) this.view.setState({ kind: 'result', fileName, source: pair.cppContent, result });
+      if (id === this.requestId) {
+        const thinkingStatus = thinkingEnabled ? thinkingTracker.finish() : undefined;
+        this.view.setState({ kind: 'result', fileName, source: pair.cppContent, result, ...(thinkingStatus ? { thinkingStatus } : {}) });
+      }
     } catch (error) {
       if (id !== this.requestId) return;
       const message = error instanceof ApiError ? error.message : '评审过程中发生未知错误。';

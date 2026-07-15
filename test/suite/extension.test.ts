@@ -5,9 +5,9 @@ import * as vscode from 'vscode';
 
 interface TestState {
   kind: 'idle' | 'loading' | 'result' | 'error';
-  reasoning?: string;
   content?: string;
   preview?: { summary?: string };
+  thinkingStatus?: { label: string; complete: boolean };
   result?: { verdict: string };
 }
 interface ExtensionTestApi {
@@ -79,13 +79,16 @@ suite('408 Judge extension', () => {
         start(controller) {
           controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"正在检查边界"}}]}\n\n'));
           setTimeout(() => {
-            const split = resultJson.indexOf('整体可行') + 2;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(0, split) }, finish_reason: null }] })}\n\n`));
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"条件、数组越界和内存安全"}}]}\n\n'));
             setTimeout(() => {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(split) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
-              controller.close();
+              const split = resultJson.indexOf('整体可行') + 2;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(0, split) }, finish_reason: null }] })}\n\n`));
+              setTimeout(() => {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(split) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
+                controller.close();
+              }, 100);
             }, 100);
-          }, 80);
+          }, 850);
         }
       });
       return Promise.resolve(new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
@@ -96,7 +99,7 @@ suite('408 Judge extension', () => {
     await waitFor(() => call === 1, 'first network request did not start');
     const firstId = api.getActiveRequestId();
     const second = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
-    await waitFor(() => api.getState().kind === 'loading' && api.getState().reasoning === '正在检查边界', 'streamed reasoning was not rendered');
+    await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === '正在检查边界条件与内存安全', 'thinking summary was not updated');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().preview?.summary === '整体', 'structured conclusion was not rendered incrementally');
     await Promise.all([first, second]);
 
