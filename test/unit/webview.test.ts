@@ -50,7 +50,9 @@ describe('diff webview markup', () => {
     }, 'nonce');
     expect(html).not.toContain('当前为关闭思考模式');
     expect(html).not.toContain('思考过程');
-    expect(html).toContain('判题结论');
+    expect(html).not.toContain('判题结论');
+    expect(html).not.toContain('class="live-badge"');
+    expect(html).toContain('<section class="live-preview" aria-live="polite">');
   });
 
   it('shows a compact thinking summary instead of raw reasoning', async () => {
@@ -76,6 +78,7 @@ describe('diff webview markup', () => {
     }, 'nonce');
     expect(html).toContain('id="thinking-spinner" class="spinner" hidden');
     expect(html).toContain('[hidden]{display:none!important}');
+    expect(html).toContain('<section class="live-preview final-result">');
   });
 
   it('loads the Basic Cannon bundle and can launch it during streaming', async () => {
@@ -83,8 +86,9 @@ describe('diff webview markup', () => {
     const html = renderWebview({
       kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', attempt: 1,
       preview: { verdict: 'correct', summary: '答案正确' }
-    }, 'nonce', true, 'vscode-resource:/dist/confetti.js');
+    }, 'nonce', true, 'vscode-resource:/dist/confetti.js', 'vscode-webview://unit-test');
     expect(html).toContain('src="vscode-resource:/dist/confetti.js"');
+    expect(html).toContain("script-src vscode-webview://unit-test 'nonce-nonce'");
     expect(html).toContain('function launchConfetti()');
     expect(html).toContain("event.data.celebrateCorrect)launchConfetti()");
     expect(html).toContain("if(true)queueMicrotask(launchConfetti)");
@@ -96,7 +100,7 @@ describe('diff webview markup', () => {
     const { JudgeViewProvider } = await import('../../src/webview.js');
     const messages: Array<{ celebrateCorrect?: boolean }> = [];
     const webview = {
-      options: {}, html: '',
+      options: {}, html: '', cspSource: 'vscode-webview://unit-test',
       asWebviewUri: (uri: { toString(): string }) => uri,
       onDidReceiveMessage: () => ({ dispose() {} }),
       postMessage: async (message: { celebrateCorrect?: boolean }) => { messages.push(message); return true; }
