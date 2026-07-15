@@ -46,7 +46,7 @@ npm run package
 安装生成的 VSIX：
 
 ```sh
-code --install-extension ./408-judge-0.7.0.vsix
+code --install-extension ./408-judge-0.8.0.vsix
 ```
 
 本项目仅生成本地 VSIX，不包含 Marketplace 发布流程。`fixtures/` 均为原创最小测试数据，不包含教材 PDF 或真实题库内容。

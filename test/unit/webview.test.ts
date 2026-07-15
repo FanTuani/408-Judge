@@ -34,6 +34,8 @@ describe('diff webview markup', () => {
     expect(html).toContain('id="structured-preview"');
     expect(html).toContain('返回值仍在生成');
     expect(html).toContain('错误');
+    expect(html).not.toContain('class="caret"');
+    expect(html).not.toContain('live-value');
     expect(html).not.toContain('id="conclusion"');
     expect(html).not.toContain('{&quot;verdict&quot;');
   });
