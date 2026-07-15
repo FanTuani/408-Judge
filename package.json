@@ -1,0 +1,101 @@
+{
+  "name": "408-judge",
+  "displayName": "408 Judge",
+  "description": "使用 DeepSeek 在侧边栏评审当前 408 C++ 题解",
+  "version": "0.5.0",
+  "publisher": "local-408",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": ["Education", "Other"],
+  "activationEvents": [
+    "onView:deepseekJudge.resultsView",
+    "onCommand:deepseekJudge.reviewCurrent",
+    "onCommand:deepseekJudge.setApiKey",
+    "onCommand:deepseekJudge.clearApiKey"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "deepseekJudge.reviewCurrent", "title": "408 Judge: 评审当前 C++ 作答", "icon": "$(checklist)" },
+      { "command": "deepseekJudge.setApiKey", "title": "408 Judge: 设置 DeepSeek API Key", "icon": "$(key)" },
+      { "command": "deepseekJudge.clearApiKey", "title": "408 Judge: 清除 DeepSeek API Key", "icon": "$(trash)" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "deepseekJudge.reviewCurrent", "when": "editorLangId == cpp", "group": "navigation@20" }
+      ],
+      "view/title": [
+        { "command": "deepseekJudge.reviewCurrent", "when": "view == deepseekJudge.resultsView", "group": "navigation@1" },
+        { "command": "deepseekJudge.setApiKey", "when": "view == deepseekJudge.resultsView", "group": "navigation@2" }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "deepseekJudge", "title": "408 Judge", "icon": "media/judge.svg" }
+      ]
+    },
+    "views": {
+      "deepseekJudge": [
+        { "type": "webview", "id": "deepseekJudge.resultsView", "name": "判题结果" }
+      ]
+    },
+    "configuration": {
+      "title": "408 Judge",
+      "properties": {
+        "deepseekJudge.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.deepseek.com",
+          "description": "DeepSeek API 基础地址。"
+        },
+        "deepseekJudge.model": {
+          "type": "string",
+          "default": "deepseek-v4-pro",
+          "description": "用于判题的 DeepSeek 模型。"
+        },
+        "deepseekJudge.thinkingLevel": {
+          "type": "string",
+          "enum": ["disabled", "high", "max"],
+          "enumDescriptions": ["关闭思考：直接生成判题结论。", "高强度：启用官方 high 思考强度。", "最大强度：启用官方 max 思考强度。"],
+          "default": "high",
+          "description": "DeepSeek 官方思考模式等级：关闭、高强度或最大强度。"
+        },
+        "deepseekJudge.additionalPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "附加在固定安全提示词后的个人评审要求。"
+        },
+        "deepseekJudge.requestTimeoutSeconds": {
+          "type": "number",
+          "default": 90,
+          "minimum": 5,
+          "maximum": 600,
+          "description": "单次 API 请求超时秒数。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "pretest:integration": "npm run build && tsc -p test/tsconfig.json",
+    "test:integration": "node ./out-test/runTest.js",
+    "test": "npm run typecheck && npm run test:unit",
+    "package": "npm run test && npm run build && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.15.0",
+    "@types/vscode": "^1.100.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.4",
+    "mocha": "^11.2.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}

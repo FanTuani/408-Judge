@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "../out-test",
+    "rootDir": ".",
+    "noEmitOnError": true,
+    "types": ["node", "vscode", "mocha"]
+  },
+  "include": ["runTest.ts", "suite/**/*.ts"],
+  "exclude": ["../node_modules", "../dist", "unit"]
+}

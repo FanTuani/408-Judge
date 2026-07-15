@@ -1,0 +1,17 @@
+.git/**
+.gitignore
+.github/**
+.vscode/**
+src/**
+test/**
+fixtures/**
+node_modules/**
+out-test/**
+.vscode-test/**
+.install-test/**
+.install-user/**
+*.vsix
+tsconfig.json
+esbuild.mjs
+package-lock.json
+vitest.config.ts

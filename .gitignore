@@ -1,0 +1,9 @@
+node_modules/
+dist/
+src/*.js
+out-test/
+.vscode-test/
+.install-test/
+.install-user/
+*.vsix
+.DS_Store
