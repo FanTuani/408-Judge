@@ -28,4 +28,17 @@ describe('prompt construction', () => {
     expect(prompt).toContain('<<<UNTRUSTED_DATA_X:CPP>>>');
     expect(prompt).toContain('<<<END_UNTRUSTED_DATA_X:CPP>>>');
   });
+
+  it('instructs the model to make a conservative assessment without markdown or problem comments', () => {
+    const prompt = buildUserPrompt({
+      cppPath: '/x/no-context.cpp',
+      cppContent: 'int f(int *a, int n) { for (int i = 0; i < n; ++i) a[i] *= 2; return n; }'
+    }, 'no-context.cpp');
+
+    expect(prompt).toContain('参考讲解状态：未提供；仍需继续评审 CPP。');
+    expect(prompt).toContain('未提供同名 Markdown 参考讲解');
+    expect(SYSTEM_PROMPT).toContain('不得仅因没有 Markdown 就直接判 insufficient');
+    expect(SYSTEM_PROMPT).toContain('函数签名与名称');
+    expect(SYSTEM_PROMPT).toContain('适当降低 confidence');
+  });
 });

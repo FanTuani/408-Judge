@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasAnswerCode, pairSource, PairingError } from '../../src/pairing.js';
+import { hasAnswerCode, pairSource } from '../../src/pairing.js';
 
 describe('source pairing', () => {
   it.each([
@@ -27,9 +27,13 @@ describe('source pairing', () => {
       .rejects.toMatchObject({ code });
   });
 
-  it('rejects a missing markdown file', async () => {
-    await expect(pairSource('/repo/a.cpp', 'int main(){}', { readFile: async () => { throw new Error('ENOENT'); } }))
-      .rejects.toEqual(expect.objectContaining<PairingError>({ code: 'missing_markdown' }));
+  it('continues without reference data when markdown is missing', async () => {
+    const pair = await pairSource('/repo/a.cpp', 'int main(){}', {
+      readFile: async () => { throw new Error('ENOENT'); }
+    });
+    expect(pair.cppContent).toBe('int main(){}');
+    expect(pair.mdPath).toBeUndefined();
+    expect(pair.mdContent).toBeUndefined();
   });
 
   it('distinguishes code from comment markers inside strings', () => {

@@ -2,12 +2,12 @@ import * as path from 'node:path';
 
 export interface SourcePair {
   cppPath: string;
-  mdPath: string;
+  mdPath?: string;
   cppContent: string;
-  mdContent: string;
+  mdContent?: string;
 }
 
-export type PairingErrorCode = 'wrong_extension' | 'missing_markdown' | 'no_answer';
+export type PairingErrorCode = 'wrong_extension' | 'no_answer';
 
 export class PairingError extends Error {
   constructor(public readonly code: PairingErrorCode, message: string) {
@@ -64,11 +64,10 @@ export async function pairSource(
     throw new PairingError('no_answer', '当前文件只有题干注释或工程样板，没有检测到作答代码。');
   }
   const mdPath = cppPath.slice(0, -4) + '.md';
-  let mdContent: string;
   try {
-    mdContent = await fileSystem.readFile(mdPath);
+    const mdContent = await fileSystem.readFile(mdPath);
+    return { cppPath, mdPath, cppContent: unsavedCppContent, mdContent };
   } catch {
-    throw new PairingError('missing_markdown', `未找到同目录参考讲解：${path.basename(mdPath)}`);
+    return { cppPath, cppContent: unsavedCppContent };
   }
-  return { cppPath, mdPath, cppContent: unsavedCppContent, mdContent };
 }
