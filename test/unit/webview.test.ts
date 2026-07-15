@@ -79,6 +79,9 @@ describe('diff webview markup', () => {
     expect(html).toContain('id="thinking-spinner" class="spinner" hidden');
     expect(html).toContain('[hidden]{display:none!important}');
     expect(html).toContain('<section class="live-preview final-result">');
+    expect(html).toContain('<div class="thinking-toolbar"><div class="stream-status thinking-complete">');
+    expect(html.indexOf('id="thinking-label"')).toBeLessThan(html.indexOf('id="thinking-level"'));
+    expect(html.indexOf('id="thinking-level"')).toBeGreaterThan(html.indexOf('</header>'));
   });
 
   it('loads the Basic Cannon bundle and can launch it during streaming', async () => {
