@@ -178,23 +178,21 @@ export async function requestThinkingSummary(request: ThinkingSummaryRequest, fe
 }
 
 interface ThinkingSummarySchedulerOptions {
-  initialDelayMs?: number;
-  minimumIntervalMs?: number;
+  initialReasoningChars?: number;
+  subsequentReasoningDeltaChars?: number;
   maxReasoningChars?: number;
   staleThresholdChars?: number;
-  minimumReasoningDeltaChars?: number;
   signal?: AbortSignal;
 }
 
 type Summarize = (reasoning: string, previousSummary: string, signal: AbortSignal) => Promise<ThinkingStage | undefined>;
 
-/** Throttles sidecar summaries, keeps one request in flight, and discards stale results. */
+/** Batches sidecar summaries by reasoning length, keeps one request in flight, and discards stale results. */
 export class ThinkingSummaryScheduler {
-  private readonly initialDelayMs: number;
-  private readonly minimumIntervalMs: number;
+  private readonly initialReasoningChars: number;
+  private readonly subsequentReasoningDeltaChars: number;
   private readonly maxReasoningChars: number;
   private readonly staleThresholdChars: number;
-  private readonly minimumReasoningDeltaChars: number;
   private readonly externalSignal?: AbortSignal;
   private readonly onExternalAbort = () => this.dispose();
   private attempt = 1;
@@ -202,8 +200,6 @@ export class ThinkingSummaryScheduler {
   private reasoning = '';
   private previousSummary = 'Thinking';
   private lastRequestedLength = 0;
-  private lastRequestAt = Date.now();
-  private timer?: ReturnType<typeof setTimeout>;
   private activeAbort?: AbortController;
   private disposed = false;
 
@@ -212,11 +208,10 @@ export class ThinkingSummaryScheduler {
     private readonly onSummary: (stage: ThinkingStage, attempt: number) => void,
     options: ThinkingSummarySchedulerOptions = {}
   ) {
-    this.initialDelayMs = options.initialDelayMs ?? 1_800;
-    this.minimumIntervalMs = options.minimumIntervalMs ?? 5_000;
-    this.maxReasoningChars = options.maxReasoningChars ?? 1_800;
+    this.initialReasoningChars = options.initialReasoningChars ?? 150;
+    this.subsequentReasoningDeltaChars = options.subsequentReasoningDeltaChars ?? 500;
+    this.maxReasoningChars = options.maxReasoningChars ?? 800;
     this.staleThresholdChars = options.staleThresholdChars ?? 1_200;
-    this.minimumReasoningDeltaChars = options.minimumReasoningDeltaChars ?? 240;
     this.externalSignal = options.signal;
     if (this.externalSignal?.aborted) this.disposed = true;
     else this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
@@ -226,15 +221,13 @@ export class ThinkingSummaryScheduler {
     if (this.disposed) return;
     if (attempt !== this.attempt) this.reset(attempt);
     this.reasoning = reasoning;
-    if (reasoning.trim() && reasoning.length - this.lastRequestedLength >= this.minimumReasoningDeltaChars) this.schedule();
+    if (reasoning.trim() && this.hasEnoughNewReasoning()) this.schedule();
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.generation += 1;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
     this.activeAbort?.abort();
     this.activeAbort = undefined;
     this.externalSignal?.removeEventListener('abort', this.onExternalAbort);
@@ -242,25 +235,24 @@ export class ThinkingSummaryScheduler {
 
   private reset(attempt: number): void {
     this.generation += 1;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = undefined;
     this.activeAbort?.abort();
     this.activeAbort = undefined;
     this.attempt = attempt;
     this.reasoning = '';
     this.previousSummary = 'Thinking';
     this.lastRequestedLength = 0;
-    this.lastRequestAt = Date.now();
   }
 
   private schedule(): void {
-    if (this.timer || this.activeAbort || this.disposed) return;
-    const wait = this.lastRequestedLength === 0 ? this.initialDelayMs : this.minimumIntervalMs;
-    const delay = Math.max(0, this.lastRequestAt + wait - Date.now());
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
-      void this.run();
-    }, delay);
+    if (this.activeAbort || this.disposed) return;
+    void this.run();
+  }
+
+  private hasEnoughNewReasoning(): boolean {
+    const requiredChars = this.lastRequestedLength === 0
+      ? this.initialReasoningChars
+      : this.subsequentReasoningDeltaChars;
+    return this.reasoning.length - this.lastRequestedLength >= requiredChars;
   }
 
   private async run(): Promise<void> {
@@ -271,7 +263,6 @@ export class ThinkingSummaryScheduler {
     const snapshot = this.reasoning.slice(-this.maxReasoningChars);
     const controller = new AbortController();
     this.activeAbort = controller;
-    this.lastRequestAt = Date.now();
     try {
       const summary = await this.summarize(snapshot, this.previousSummary, controller.signal);
       this.lastRequestedLength = snapshotLength;
@@ -283,7 +274,7 @@ export class ThinkingSummaryScheduler {
       }
     } finally {
       if (this.activeAbort === controller) this.activeAbort = undefined;
-      if (!this.disposed && generation === this.generation && this.reasoning.length - this.lastRequestedLength >= this.minimumReasoningDeltaChars) this.schedule();
+      if (!this.disposed && generation === this.generation && this.hasEnoughNewReasoning()) this.schedule();
     }
   }
 }

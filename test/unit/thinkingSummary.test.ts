@@ -85,7 +85,7 @@ describe('thinking summary', () => {
 
     const summarize = vi.fn();
     const scheduler = new ThinkingSummaryScheduler(summarize, () => {}, {
-      initialDelayMs: 0, minimumReasoningDeltaChars: 1, signal: controller.signal
+      initialReasoningChars: 1, subsequentReasoningDeltaChars: 1, signal: controller.signal
     });
     scheduler.update('已经产生的推理', 1);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -101,7 +101,7 @@ describe('thinking summary', () => {
     }));
     const received: string[] = [];
     const scheduler = new ThinkingSummaryScheduler(summarize, stage => received.push(stage.title), {
-      initialDelayMs: 0, minimumIntervalMs: 0, minimumReasoningDeltaChars: 1
+      initialReasoningChars: 1, subsequentReasoningDeltaChars: 1
     });
     scheduler.update('第一段推理', 1);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -113,6 +113,36 @@ describe('thinking summary', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(summarize).toHaveBeenCalledTimes(2);
     expect(received).toEqual(['生成第一条摘要', '生成第二条摘要']);
+    scheduler.dispose();
+  });
+
+  it('summarizes at 150 characters, then every 500 characters, using only the latest 800', async () => {
+    const snapshots: string[] = [];
+    const summarize = vi.fn(async (reasoning: string) => {
+      snapshots.push(reasoning);
+      return { title: '概括当前阶段', detail: '说明当前检查内容。' };
+    });
+    const scheduler = new ThinkingSummaryScheduler(summarize, () => {});
+
+    scheduler.update('a'.repeat(149), 1);
+    expect(summarize).not.toHaveBeenCalled();
+    scheduler.update('a'.repeat(150), 1);
+    expect(summarize).toHaveBeenCalledTimes(1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    scheduler.update('a'.repeat(649), 1);
+    expect(summarize).toHaveBeenCalledTimes(1);
+    scheduler.update('a'.repeat(650), 1);
+    expect(summarize).toHaveBeenCalledTimes(2);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    scheduler.update('a'.repeat(1_149), 1);
+    expect(summarize).toHaveBeenCalledTimes(2);
+    scheduler.update('a'.repeat(1_150), 1);
+    expect(summarize).toHaveBeenCalledTimes(3);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(snapshots.map(snapshot => snapshot.length)).toEqual([150, 650, 800]);
     scheduler.dispose();
   });
 
