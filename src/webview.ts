@@ -126,7 +126,9 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .result-block dl{margin:0}
     .result-block>p:last-child{margin-bottom:0}
     #header-actions{display:flex;min-width:120px;justify-content:flex-end}
-    .thinking-pending-controls .thinking-level-select,.pending-review-actions .thinking-level-select{visibility:hidden;pointer-events:none}
+    .thinking-toolbar{position:relative}
+    .thinking-pending-controls .thinking-level-select{position:absolute;inset-inline-end:0;top:0;visibility:hidden;pointer-events:none}
+    .pending-review-actions .thinking-level-select{visibility:hidden;pointer-events:none}
     .result-block-enter{animation:result-block-reveal .52s cubic-bezier(.16,1,.3,1) both}
     .final-result .result-block:nth-child(2){animation-delay:.05s}
     .final-result .result-block:nth-child(3){animation-delay:.1s}
