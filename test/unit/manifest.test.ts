@@ -2,6 +2,16 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('extension settings manifest', () => {
+  it('contains the public Marketplace metadata', () => {
+    const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    expect(manifest.icon).toBe('media/icon.png');
+    expect(manifest.repository.url).toBe('https://github.com/FanTuani/408-Judge.git');
+    expect(manifest.homepage).toBe('https://github.com/FanTuani/408-Judge#readme');
+    expect(manifest.bugs.url).toBe('https://github.com/FanTuani/408-Judge/issues');
+    expect(manifest.keywords).toContain('408');
+    expect(manifest.license).toBe('SEE LICENSE IN LICENSE');
+  });
+
   it('offers exactly three reasoning levels and defaults to high', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
     const setting = manifest.contributes.configuration.properties['deepseekJudge.thinkingLevel'];
