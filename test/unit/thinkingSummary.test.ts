@@ -51,7 +51,8 @@ describe('thinking summary', () => {
   it('streams the current stage detail as it is generated', async () => {
     const encoder = new TextEncoder();
     const chunks = [
-      '{"title":"检查边界条件","detail":"核对数组',
+      '{"title":"检查边界',
+      '条件","detail":"核对数组',
       '范围和循环终止条件。"}'
     ];
     const body = new ReadableStream<Uint8Array>({
@@ -63,16 +64,17 @@ describe('thinking summary', () => {
         controller.close();
       }
     });
-    const progress: string[] = [];
+    const progress: Array<{ title: string; detail: string }> = [];
     const stage = await requestThinkingSummary({
       apiKey: 'secret', baseUrl: 'https://example.test', model: 'deepseek-v4-flash',
       reasoning: '分析循环边界', previousSummary: 'Thinking', timeoutSeconds: 1,
-      onProgress: value => progress.push(value.detail)
+      onProgress: value => progress.push(value)
     }, async () => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
 
     expect(stage).toEqual({ title: '检查边界条件', detail: '核对数组范围和循环终止条件。' });
-    expect(progress).toContain('核对数组');
-    expect(progress.at(-1)).toBe('核对数组范围和循环终止条件。');
+    expect(new Set(progress.map(value => value.title))).toEqual(new Set(['检查边界条件']));
+    expect(progress.map(value => value.detail)).toContain('核对数组');
+    expect(progress.at(-1)?.detail).toBe('核对数组范围和循环终止条件。');
   });
 
   it('keeps only one sidecar request in flight and schedules fresh reasoning afterward', async () => {
@@ -110,6 +112,10 @@ describe('thinking summary', () => {
     expect(tracker.applySummary({ title: '验证返回值', detail: '确认函数结果符合目标。' }, 1, 2_000).stages).toEqual([
       { title: '检查循环边界', detail: '继续核对终止条件。' },
       { title: '验证返回值', detail: '确认函数结果符合目标。' }
+    ]);
+    expect(tracker.applySummary({ title: '验证返回值语义', detail: '继续核对返回值约定。' }, 1, 2_100).stages).toEqual([
+      { title: '检查循环边界', detail: '继续核对终止条件。' },
+      { title: '验证返回值语义', detail: '继续核对返回值约定。' }
     ]);
     expect(tracker.update('{', 1, 2_700)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
     expect(tracker.update('{"verdict"', 1, 8_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });

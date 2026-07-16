@@ -129,6 +129,18 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
   </style></head><body>${body}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingDone=thinkingLabel?.dataset.complete==='true';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent='Thinking · '+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
+    let autoFollowThinking=true;
+    let followThinkingFrame=0;
+    const updateThinkingFollow=()=>{autoFollowThinking=window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-120};
+    const followThinkingOutput=()=>{
+      if(!autoFollowThinking||followThinkingFrame)return;
+      followThinkingFrame=requestAnimationFrame(()=>{
+        followThinkingFrame=0;
+        window.scrollTo({top:document.documentElement.scrollHeight,behavior:'auto'});
+      });
+    };
+    window.addEventListener('scroll',updateThinkingFollow,{passive:true});
+    window.addEventListener('resize',updateThinkingFollow);
     document.getElementById('review')?.addEventListener('click',()=>vscode.postMessage({type:'review'}));
     document.getElementById('thinking-level')?.addEventListener('change',event=>vscode.postMessage({type:'setThinkingLevel',level:event.target.value}));
     document.getElementById('cancel')?.addEventListener('click',()=>vscode.postMessage({type:'cancel'}));
@@ -176,6 +188,7 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
           item.querySelector('.thinking-stage-detail').textContent=stage.detail;
         }
         while(stages.children.length>incoming.length)stages.lastElementChild?.remove();
+        followThinkingOutput();
       }
       if(preview)preview.innerHTML=event.data.previewHtml;
       if(attempt)attempt.textContent=event.data.attempt>1?('重试 '+event.data.attempt+'/2'):'';

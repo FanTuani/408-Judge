@@ -44,6 +44,9 @@ describe('diff webview markup', () => {
     expect(html).toContain('<p class="thinking-stage-detail">检查主要控制流和关键边界条件。</p>');
     expect(html).toContain('.thinking-stages{max-height:none;overflow:visible');
     expect(html).toContain("document.createElement('li')");
+    expect(html).toContain("window.addEventListener('scroll',updateThinkingFollow,{passive:true})");
+    expect(html).toContain("window.scrollTo({top:document.documentElement.scrollHeight,behavior:'auto'})");
+    expect(html).toContain('followThinkingOutput()');
     expect(html).not.toContain('class="caret"');
     expect(html).not.toContain('live-value');
     expect(html).not.toContain('id="conclusion"');
