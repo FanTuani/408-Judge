@@ -126,6 +126,9 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .thinking-stages li:not(:last-child)::after{bottom:-.15em}
     .thinking-stage-title{display:block;color:var(--vscode-foreground);font-size:14px;line-height:1.45}
     .thinking-stage-detail{margin:5px 0 0;color:var(--vscode-descriptionForeground);font-size:12px;line-height:1.55}
+    .thinking-stream-fragment{animation:thinking-stream-fade .42s ease-out both}
+    @keyframes thinking-stream-fade{from{opacity:.18;filter:blur(.7px)}to{opacity:1;filter:blur(0)}}
+    @media (prefers-reduced-motion:reduce){.thinking-stream-fragment{animation:none}}
   </style></head><body>${body}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingDone=thinkingLabel?.dataset.complete==='true';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent='Thinking · '+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
@@ -185,7 +188,18 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
             stages.appendChild(item);
           }
           item.querySelector('.thinking-stage-title').textContent=stage.title;
-          item.querySelector('.thinking-stage-detail').textContent=stage.detail;
+          const detail=item.querySelector('.thinking-stage-detail');
+          const previousDetail=detail.textContent||'';
+          const nextDetail=typeof stage.detail==='string'?stage.detail:'';
+          if(nextDetail.startsWith(previousDetail)&&nextDetail.length>previousDetail.length){
+            detail.textContent=previousDetail;
+            const fragment=document.createElement('span');
+            fragment.className='thinking-stream-fragment';
+            fragment.textContent=nextDetail.slice(previousDetail.length);
+            detail.appendChild(fragment);
+          }else if(nextDetail!==previousDetail){
+            detail.textContent=nextDetail;
+          }
         }
         while(stages.children.length>incoming.length)stages.lastElementChild?.remove();
         followThinkingOutput();
