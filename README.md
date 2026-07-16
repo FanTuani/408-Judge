@@ -76,7 +76,7 @@ tree_exam_2024.cpp    → tree_exam_2024.md
 | `deepseekJudge.model` | `deepseek-v4-pro` | 选择主评审模型 |
 | `deepseekJudge.thinkingLevel` | `high` | 设置思考强度 |
 | `deepseekJudge.additionalPrompt` | 空 | 增加个人评审要求 |
-| `deepseekJudge.requestTimeoutSeconds` | `90` | 调整请求超时时间 |
+| `deepseekJudge.requestTimeoutSeconds` | `600` | 调整请求超时时间 |
 | `deepseekJudge.apiBaseUrl` | `https://api.deepseek.com` | 使用兼容的自定义 API 地址 |
 | `deepseekJudge.thinkingSummaryModel` | `deepseek-v4-flash` | 选择思考阶段概括模型 |
 

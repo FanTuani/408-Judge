@@ -99,7 +99,7 @@ class JudgeController implements vscode.Disposable {
           model: config.get('thinkingSummaryModel', 'deepseek-v4-flash'),
           reasoning,
           previousSummary,
-          timeoutSeconds: Math.min(15, config.get('requestTimeoutSeconds', 90)),
+          timeoutSeconds: Math.min(15, config.get('requestTimeoutSeconds', 600)),
           signal
         }, this.fetcher),
         (stage, attempt) => {
@@ -124,7 +124,7 @@ class JudgeController implements vscode.Disposable {
         thinkingLevel,
         systemPrompt: SYSTEM_PROMPT,
         userPrompt: buildUserPrompt(pair, relativePath, config.get('additionalPrompt', '')),
-        timeoutSeconds: config.get('requestTimeoutSeconds', 90),
+        timeoutSeconds: config.get('requestTimeoutSeconds', 600),
         signal: abort.signal,
         onStream: progress => {
           if (id === this.requestId) {

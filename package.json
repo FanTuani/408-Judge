@@ -93,7 +93,7 @@
         {
           "id": "deepseekJudge",
           "title": "408 Judge",
-          "icon": "media/judge.svg"
+          "icon": "media/judge.png"
         }
       ]
     },
@@ -146,7 +146,7 @@
         },
         "deepseekJudge.requestTimeoutSeconds": {
           "type": "number",
-          "default": 90,
+          "default": 600,
           "minimum": 5,
           "maximum": 600,
           "description": "单次 API 请求超时秒数。"

@@ -42,4 +42,10 @@ describe('prompt construction', () => {
     expect(SYSTEM_PROMPT).toContain('关键假设和不确定性');
     expect(SYSTEM_PROMPT).not.toContain('"confidence"');
   });
+
+  it('accepts free for C-allocated memory without stylistic objections', () => {
+    expect(SYSTEM_PROMPT).toContain('不要仅因代码使用 free 释放内存而提出异议');
+    expect(SYSTEM_PROMPT).toContain('内存来自 malloc、calloc 或 realloc，使用 free 就是正确做法');
+    expect(SYSTEM_PROMPT).toContain('释放方式不匹配');
+  });
 });

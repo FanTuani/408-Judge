@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('extension settings manifest', () => {
@@ -25,12 +25,21 @@ describe('extension settings manifest', () => {
     expect(manifest.contributes.configuration.properties['deepseekJudge.thinkingSummaryModel'].default).toBe('deepseek-v4-flash');
   });
 
-  it('uses a theme-aware 24px activity bar icon', () => {
+  it('allows the default review request to run for up to ten minutes', () => {
+    const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    const setting = manifest.contributes.configuration.properties['deepseekJudge.requestTimeoutSeconds'];
+    expect(setting.default).toBe(600);
+    expect(setting.maximum).toBe(600);
+  });
+
+  it('uses a publish-safe 24px PNG activity bar icon', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
     const iconPath = manifest.contributes.viewsContainers.activitybar[0].icon;
-    const icon = readFileSync(iconPath, 'utf8');
-    expect(iconPath).toBe('media/judge.svg');
-    expect(icon).toContain('viewBox="0 0 24 24"');
-    expect(icon).toContain('stroke="currentColor"');
+    const icon = readFileSync(iconPath);
+    expect(iconPath).toBe('media/judge.png');
+    expect(icon.subarray(1, 4).toString('ascii')).toBe('PNG');
+    expect(icon.readUInt32BE(16)).toBe(24);
+    expect(icon.readUInt32BE(20)).toBe(24);
+    expect(readdirSync('media').filter((file) => file.endsWith('.svg'))).toEqual([]);
   });
 });
