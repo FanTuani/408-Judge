@@ -1,90 +1,103 @@
+<p align="center">
+  <img src="media/icon.png" width="96" alt="408 Judge 图标">
+</p>
+
 # 408 Judge
 
-408 Judge 是一个面向计算机考研 408 数据结构与算法练习的 VS Code 扩展。它使用 DeepSeek 评审当前 C++ 作答，并在独立侧边栏中给出结论、问题定位、复杂度分析和最小修改建议。
+在 VS Code 里直接检查你的 408 数据结构与算法 C++ 作答。
 
-## 功能
+408 Judge 会结合当前代码和可选的参考讲解，使用 DeepSeek 判断答案是否正确，指出具体问题，分析时间与空间复杂度，并给出尽量小的修改建议。你不需要复制代码到网页，也不需要先保存刚刚写下的修改。
 
-- 评审编辑器中尚未保存的最新 C++ 内容。
-- 自动查找同目录、同文件名主体的 Markdown 参考讲解。
-- 展示阶段化的思考状态，但不展示模型原始思维链。
-- 思考概括和最终结论按完整内容块平滑出现，不暴露未完成的流式文本。
-- 区分 `correct`、`partially_correct`、`incorrect` 和 `insufficient`。
-- 支持带行号的问题定位和最小连续行修复建议。
-- 结论正确时播放一次庆祝动画；系统开启“减少动态效果”时自动禁用。
-- API Key 仅保存在 VS Code SecretStorage 中。
+## 你会得到什么
 
-扩展不会修改源码、写入 Problems、生成本地报告，也不会上传当前题目之外的目录内容。
+- **明确结论**：正确、部分正确、错误或信息不足。
+- **总体评价**：用简短文字说明当前实现的完成度和主要风险。
+- **正确之处**：保留已经成立的思路，避免为了改而改。
+- **问题定位**：说明错误原因；能定位时可点击行号回到源码。
+- **复杂度分析**：给出时间复杂度、空间复杂度及是否合理。
+- **最小修复**：只展示必要的连续行改动，不直接修改你的文件。
 
-## 使用要求
+评审过程中，侧边栏会用阶段标题和简短概括说明当前大致在做什么，但不会展示模型的原始思维链。完整结果准备好后会按内容块平滑出现。
 
-- VS Code 1.100.0 或更高版本。
-- DeepSeek API Key，以及可用的 API 余额。
-- 当前编辑器中的文件语言为 C++。
+## 开始使用
 
-## 快速开始
+使用前需要：
 
-1. 打开需要评审的 `.cpp` 文件。
-2. 在编辑器右键菜单中选择“408 Judge: 评审当前 C++ 作答”，或从命令面板运行同名命令。
-3. 首次使用时按提示输入 DeepSeek API Key。
-4. 在 Activity Bar 中打开 “408 Judge” 查看思考阶段和评审结果。
+- VS Code 1.100.0 或更高版本；
+- 一个可用的 DeepSeek API Key；
+- DeepSeek 账户中有足够的 API 余额。
 
-同目录存在同名讲解时会自动作为参考，例如：
+安装扩展后：
+
+1. 在 VS Code 中打开需要检查的 `.cpp` 文件。
+2. 在编辑器里右键，选择“408 Judge: 评审当前 C++ 作答”。也可以从命令面板运行同名命令。
+3. 首次使用时，按提示输入 DeepSeek API Key。
+4. 打开 Activity Bar 中的 “408 Judge” 查看进度和结果。
+
+API Key 会保存在 VS Code 的安全存储中。保存后本次评审会自动继续，不需要再次点击。
+
+## 搭配参考讲解
+
+如果同目录中存在同名 Markdown 文件，扩展会自动把它作为参考。例如：
 
 ```text
-tree.cpp              -> tree.md
-tree_exam_2024.cpp    -> tree_exam_2024.md
+tree.cpp              → tree.md
+tree_exam_2024.cpp    → tree_exam_2024.md
 ```
 
-没有 Markdown 讲解也可以继续评审。模型会根据函数签名、参数、数据结构和代码行为进行保守判断，并说明关键假设。
+参考讲解不是唯一答案。扩展仍会检查代码本身的逻辑、边界条件和复杂度，不会因为实现方式与参考答案不同就直接判错。
 
-## 数据与隐私
+没有 Markdown 文件也可以评审。上下文不足时，结果会明确说明所作的假设和无法确认的部分。
 
-评审时，扩展会把当前 C++ 内容、可选的同名 Markdown 讲解和用户设置的附加提示词发送到配置的 API 地址。默认地址是 `https://api.deepseek.com`。使用自定义 `apiBaseUrl` 时，数据会发送给该地址对应的服务提供者。
+## 选择思考强度
 
-扩展本身不收集遥测或分析数据。API Key 不会写入工作区配置、日志或错误信息。DeepSeek 或自定义 API 服务如何处理请求数据，取决于相应服务提供者的条款与隐私政策。完整说明参见 [PRIVACY.md](PRIVACY.md)。
+你可以在侧边栏切换下一次评审使用的思考强度：
 
-## 命令
+- **关闭**：更快，适合简单代码和快速检查。
+- **高强度**：默认选项，兼顾速度和分析深度。
+- **最大强度**：适合边界条件多、指针操作复杂或较难判断的实现。
 
-- `deepseekJudge.reviewCurrent`：评审当前 C++ 作答。
-- `deepseekJudge.setApiKey`：设置或替换 API Key。
-- `deepseekJudge.clearApiKey`：从 SecretStorage 删除 API Key。
+更高的思考强度通常需要更多时间，也可能产生更多 API 用量。正在进行的评审不会被中途切换；新设置从下一次开始生效。
 
-## 设置
+## 常用操作
 
-| 设置 | 默认值 | 说明 |
+- **重新评审**：再次运行“408 Judge: 评审当前 C++ 作答”。新请求会自动取消旧请求。
+- **取消评审**：点击侧边栏中的“取消”。
+- **更换 API Key**：运行“408 Judge: 设置 DeepSeek API Key”。
+- **删除 API Key**：运行“408 Judge: 清除 DeepSeek API Key”。
+- **补充要求**：在设置中填写 `deepseekJudge.additionalPrompt`，例如“重点检查空链表和单节点情况”。
+
+## 可选设置
+
+大多数用户可以直接使用默认值。
+
+| 设置 | 默认值 | 用途 |
 | --- | --- | --- |
-| `deepseekJudge.apiBaseUrl` | `https://api.deepseek.com` | API 基础地址 |
-| `deepseekJudge.model` | `deepseek-v4-pro` | 主评审模型 |
-| `deepseekJudge.thinkingLevel` | `high` | `disabled`、`high` 或 `max` |
-| `deepseekJudge.thinkingSummaryModel` | `deepseek-v4-flash` | 思考阶段概括模型 |
-| `deepseekJudge.additionalPrompt` | 空 | 追加个人评审要求 |
-| `deepseekJudge.requestTimeoutSeconds` | `90` | 单次请求超时秒数 |
+| `deepseekJudge.model` | `deepseek-v4-pro` | 选择主评审模型 |
+| `deepseekJudge.thinkingLevel` | `high` | 设置思考强度 |
+| `deepseekJudge.additionalPrompt` | 空 | 增加个人评审要求 |
+| `deepseekJudge.requestTimeoutSeconds` | `90` | 调整请求超时时间 |
+| `deepseekJudge.apiBaseUrl` | `https://api.deepseek.com` | 使用兼容的自定义 API 地址 |
+| `deepseekJudge.thinkingSummaryModel` | `deepseek-v4-flash` | 选择思考阶段概括模型 |
 
-主请求使用 OpenAI 兼容的 `POST /chat/completions` 接口、JSON object 响应格式和 SSE。连续触发评审会取消旧请求；侧边栏中的取消操作也会终止当前请求。空响应或非法 JSON 会自动重试一次。
+## 数据、隐私与费用
 
-## 本地开发
+只有在你主动发起评审时，扩展才会发送请求。发送内容包括当前 C++ 代码、可选的同名 Markdown 讲解以及你配置的附加要求。默认接收方是 DeepSeek；修改 `apiBaseUrl` 后，数据会发送给你指定的服务。
 
-要求 Node.js 20+ 和 npm：
+扩展不会上传工作区中的其他文件，不会修改源码，也不收集遥测或使用统计。API Key 不会写入项目文件、VS Code 设置、日志或错误信息。
 
-```sh
-npm install
-npm test
-npm run test:integration
-npm run package
-```
+调用模型可能产生 DeepSeek 或自定义服务提供者收取的 API 费用。服务端如何保存和处理请求数据，以相应服务提供者的条款为准。详细说明请阅读 [隐私说明](PRIVACY.md)。
 
-安装生成的 VSIX：
+## 遇到问题
 
-```sh
-code --install-extension ./408-judge-0.11.8.vsix
-```
+- **只能评审 `.cpp` 文件**：确认当前活动编辑器打开的是 C++ 源文件。
+- **提示 401 或 403**：检查 API Key 是否有效、账户余额是否可用，以及自定义 API 地址是否接受该 Key。
+- **提示模型不存在**：恢复默认模型，或确认你的 API 服务支持所填写的模型名称。
+- **长时间没有结果**：检查网络和 API 服务状态，取消后重新评审；必要时提高请求超时时间。
+- **结论缺少题目背景**：在代码注释中补充题意，或添加同名 Markdown 讲解后重新评审。
 
-Marketplace 发布前，也可以从仓库的 Release 下载 VSIX 并手动安装。
+更多排查方法参见 [支持说明](SUPPORT.md)。提交问题或功能建议时，请前往 [GitHub Issues](https://github.com/FanTuani/408-Judge/issues)，并确保删除 API Key、个人路径和私有代码。
 
-## 支持与许可
+## 许可
 
-- 使用问题和功能建议：参见 [SUPPORT.md](SUPPORT.md)。
-- 版本记录：参见 [CHANGELOG.md](CHANGELOG.md)。
-- 本项目使用 [MIT License](LICENSE)。
-
-`fixtures/` 只包含原创的最小测试数据，不包含教材 PDF 或真实题库内容。
+408 Judge 使用 [MIT License](LICENSE)。版本变化参见 [CHANGELOG.md](CHANGELOG.md)。
