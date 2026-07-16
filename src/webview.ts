@@ -126,8 +126,8 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .thinking-stages li:not(:last-child)::after{bottom:-.15em}
     .thinking-stage-title{display:block;color:var(--vscode-foreground);font-size:14px;line-height:1.45}
     .thinking-stage-detail{margin:5px 0 0;color:var(--vscode-descriptionForeground);font-size:12px;line-height:1.55}
-    .thinking-stream-fragment{animation:thinking-stream-fade .42s ease-out both}
-    @keyframes thinking-stream-fade{from{opacity:.18;filter:blur(.7px)}to{opacity:1;filter:blur(0)}}
+    .thinking-stream-fragment{animation:thinking-stream-fade .72s cubic-bezier(.2,.7,.2,1) both}
+    @keyframes thinking-stream-fade{0%{opacity:0;filter:blur(1.8px)}45%{opacity:.62;filter:blur(.55px)}100%{opacity:1;filter:blur(0)}}
     @media (prefers-reduced-motion:reduce){.thinking-stream-fragment{animation:none}}
   </style></head><body>${body}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -192,7 +192,6 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
           const previousDetail=detail.textContent||'';
           const nextDetail=typeof stage.detail==='string'?stage.detail:'';
           if(nextDetail.startsWith(previousDetail)&&nextDetail.length>previousDetail.length){
-            detail.textContent=previousDetail;
             const fragment=document.createElement('span');
             fragment.className='thinking-stream-fragment';
             fragment.textContent=nextDetail.slice(previousDetail.length);

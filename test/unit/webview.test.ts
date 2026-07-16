@@ -47,9 +47,10 @@ describe('diff webview markup', () => {
     expect(html).toContain("window.addEventListener('scroll',updateThinkingFollow,{passive:true})");
     expect(html).toContain("window.scrollTo({top:document.documentElement.scrollHeight,behavior:'auto'})");
     expect(html).toContain('followThinkingOutput()');
-    expect(html).toContain('.thinking-stream-fragment{animation:thinking-stream-fade .42s ease-out both}');
+    expect(html).toContain('.thinking-stream-fragment{animation:thinking-stream-fade .72s cubic-bezier(.2,.7,.2,1) both}');
     expect(html).toContain("if(nextDetail.startsWith(previousDetail)&&nextDetail.length>previousDetail.length)");
     expect(html).toContain("fragment.className='thinking-stream-fragment'");
+    expect(html).not.toContain('detail.textContent=previousDetail');
     expect(html).toContain('@media (prefers-reduced-motion:reduce){.thinking-stream-fragment{animation:none}}');
     expect(html).not.toContain('class="caret"');
     expect(html).not.toContain('live-value');
