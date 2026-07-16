@@ -25,6 +25,17 @@ describe('diff webview markup', () => {
     expect(html).toContain('<tr class="diff-row added">');
     expect(html).not.toContain('<div class="diff-line');
     expect(html).not.toContain('<code>−');
+    expect(html).toContain('<section class="live-preview final-result result-stack">');
+    expect(html).toContain('data-result-block="overview"');
+    expect(html).toContain('data-result-block="strengths"');
+    expect(html).toContain('data-result-block="issues"');
+    expect(html).toContain('data-result-block="complexity"');
+    expect(html).toContain('data-result-block="fix"');
+    expect(html).toContain('.result-block-enter{animation:result-block-reveal .52s cubic-bezier(.16,1,.3,1) both}');
+    expect(html).toContain('@keyframes result-block-reveal{from{opacity:0;transform:translate3d(0,8px,0)}');
+    expect(html).toContain('const syncResultBlocks=(container,html)=>');
+    expect(html).toContain("if(current.innerHTML!==next.innerHTML)current.innerHTML=next.innerHTML");
+    expect(html).not.toContain('preview.innerHTML=event.data.previewHtml');
   });
 
   it('shows only the naturally growing thinking timeline while reasoning', async () => {
@@ -45,9 +56,9 @@ describe('diff webview markup', () => {
     expect(html).toContain('<p class="thinking-stage-detail">继续确认异常输入的处理路径。</p>');
     expect(html).toContain('.thinking-stages{max-height:none;overflow:visible');
     expect(html).toContain("document.createElement('li')");
-    expect(html).toContain("window.addEventListener('scroll',updateThinkingFollow,{passive:true})");
-    expect(html).toContain("window.scrollTo({top:document.documentElement.scrollHeight,behavior:reduceThinkingMotion?'auto':'smooth'})");
-    expect(html).toContain('followThinkingOutput()');
+    expect(html).toContain("window.addEventListener('scroll',updateOutputFollow,{passive:true})");
+    expect(html).toContain("window.scrollTo({top:document.documentElement.scrollHeight,behavior:reduceOutputMotion?'auto':'smooth'})");
+    expect(html).toContain('followLiveOutput()');
     expect(html).toContain('.thinking-stage-enter .thinking-stage-title{animation:thinking-title-reveal .48s cubic-bezier(.16,1,.3,1) both}');
     expect(html).toContain('.thinking-stage-enter::before{animation:thinking-dot-reveal .4s cubic-bezier(.16,1,.3,1) both}');
     expect(html).toContain('.thinking-stage-connected::after{transform-origin:top;animation:thinking-line-reveal .52s cubic-bezier(.16,1,.3,1) both}');
@@ -58,7 +69,7 @@ describe('diff webview markup', () => {
     expect(html).toContain("item.className='thinking-stage-enter'");
     expect(html).toContain("paragraph.className='thinking-stage-detail thinking-summary-batch'");
     expect(html).not.toContain('thinking-stream-fragment');
-    expect(html).toContain('@media (prefers-reduced-motion:reduce){.thinking-stage-enter .thinking-stage-title,.thinking-stage-enter::before,.thinking-stage-connected::after,.thinking-summary-batch{animation:none}}');
+    expect(html).toContain('@media (prefers-reduced-motion:reduce){.result-block-enter,.thinking-stage-enter .thinking-stage-title,.thinking-stage-enter::before,.thinking-stage-connected::after,.thinking-summary-batch{animation:none}}');
     expect(html).not.toContain('class="caret"');
     expect(html).not.toContain('live-value');
     expect(html).not.toContain('id="conclusion"');
@@ -137,7 +148,7 @@ describe('diff webview markup', () => {
     }, 'nonce');
     expect(html).toContain('id="thinking-spinner" class="spinner" hidden');
     expect(html).toContain('[hidden]{display:none!important}');
-    expect(html).toContain('<section class="live-preview final-result">');
+    expect(html).toContain('<section class="live-preview final-result result-stack">');
     expect(html).toContain('<div class="thinking-toolbar"><div class="thinking-block"><div class="stream-status thinking-complete">');
     expect(html.indexOf('id="thinking-label"')).toBeLessThan(html.indexOf('id="thinking-level"'));
     expect(html.indexOf('id="thinking-level"')).toBeGreaterThan(html.indexOf('</header>'));

@@ -27,6 +27,10 @@ function list(items: string[], empty: string): string {
   return `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
 }
 
+function resultBlock(key: string, content: string, className = ''): string {
+  return `<section class="result-block result-block-enter${className ? ` ${className}` : ''}" data-result-block="${escapeHtml(key)}">${content}</section>`;
+}
+
 function diffContent(source: string, result: JudgeResult): string {
   if (!result.suggestedFix) {
     return result.suggestedSnippet ? `<pre><code>${escapeHtml(result.suggestedSnippet)}</code></pre>` : '';
@@ -40,12 +44,13 @@ function diffContent(source: string, result: JudgeResult): string {
 }
 
 function previewContent(source: string, preview: JudgePreview): string {
-  if (Object.keys(preview).length === 0) return '<p class="preview-empty"><span class="typing-dot"></span>等待结构化结论…</p>';
+  if (Object.keys(preview).length === 0) return resultBlock('pending', '<p class="preview-empty"><span class="typing-dot"></span>等待结构化结论…</p>', 'result-pending');
   const header = preview.verdict ? `<div class="verdict ${preview.verdict}">${verdictLabel(preview.verdict)}</div>` : '<span class="preview-pending">结论生成中…</span>';
   const summary = typeof preview.summary === 'string' ? `<p class="summary">${escapeHtml(preview.summary)}</p>` : '';
-  const strengths = preview.strengths ? `<h2>正确之处</h2>${list(preview.strengths, '正在生成…')}` : '';
-  const issues = preview.issues ? `<h2>问题清单</h2>${preview.issues.length === 0 ? '<p class="muted">暂未生成问题。</p>' : preview.issues.map(issue => `<article class="issue severity-${escapeHtml(issue.severity ?? 'info')}"><div class="issue-title"><span>${escapeHtml(issue.title ?? '问题生成中…')}</span>${issue.line ? `<span class="preview-line">第 ${issue.line} 行</span>` : ''}</div>${issue.description ? `<p>${escapeHtml(issue.description)}</p>` : ''}${issue.suggestion ? `<p class="suggestion"><strong>建议：</strong>${escapeHtml(issue.suggestion)}</p>` : ''}</article>`).join('')}` : '';
-  const complexity = preview.complexity ? `<h2>复杂度</h2><dl>${preview.complexity.time ? `<dt>时间</dt><dd>${escapeHtml(preview.complexity.time)}</dd>` : ''}${preview.complexity.space ? `<dt>空间</dt><dd>${escapeHtml(preview.complexity.space)}</dd>` : ''}</dl>${preview.complexity.assessment ? `<p>${escapeHtml(preview.complexity.assessment)}</p>` : ''}` : '';
+  const overview = resultBlock('overview', `${header}${summary}`, 'result-overview');
+  const strengths = preview.strengths ? resultBlock('strengths', `<h2>正确之处</h2>${list(preview.strengths, '正在生成…')}`) : '';
+  const issues = preview.issues ? resultBlock('issues', `<h2>问题清单</h2>${preview.issues.length === 0 ? '<p class="muted">暂未生成问题。</p>' : preview.issues.map(issue => `<article class="issue severity-${escapeHtml(issue.severity ?? 'info')}"><div class="issue-title"><span>${escapeHtml(issue.title ?? '问题生成中…')}</span>${issue.line ? `<span class="preview-line">第 ${issue.line} 行</span>` : ''}</div>${issue.description ? `<p>${escapeHtml(issue.description)}</p>` : ''}${issue.suggestion ? `<p class="suggestion"><strong>建议：</strong>${escapeHtml(issue.suggestion)}</p>` : ''}</article>`).join('')}`) : '';
+  const complexity = preview.complexity ? resultBlock('complexity', `<h2>复杂度</h2><dl>${preview.complexity.time ? `<dt>时间</dt><dd>${escapeHtml(preview.complexity.time)}</dd>` : ''}${preview.complexity.space ? `<dt>空间</dt><dd>${escapeHtml(preview.complexity.space)}</dd>` : ''}</dl>${preview.complexity.assessment ? `<p>${escapeHtml(preview.complexity.assessment)}</p>` : ''}`) : '';
   let fix = '';
   const streamedFix = preview.suggestedFix;
   if (streamedFix || preview.suggestedSnippet) {
@@ -59,12 +64,12 @@ function previewContent(source: string, preview: JudgePreview): string {
           replacement: streamedFix.replacement!, explanation: streamedFix.explanation ?? ''
         }
       };
-      fix = `<h2>必要的局部修正</h2>${diffContent(source, resultLike)}`;
+      fix = resultBlock('fix', `<h2>必要的局部修正</h2>${diffContent(source, resultLike)}`);
     } else {
-      fix = `<h2>必要的局部修正</h2><p class="muted">正在生成并定位最小修复…</p>`;
+      fix = resultBlock('fix', '<h2>必要的局部修正</h2><p class="muted">正在生成并定位最小修复…</p>');
     }
   }
-  return `${header}${summary}${strengths}${issues}${complexity}${fix}`;
+  return `${overview}${strengths}${issues}${complexity}${fix}`;
 }
 
 function resultContent(source: string, result: JudgeResult): string {
@@ -75,14 +80,11 @@ function resultContent(source: string, result: JudgeResult): string {
         <p>${escapeHtml(issue.description)}</p>
         ${issue.suggestion ? `<p class="suggestion"><strong>建议：</strong>${escapeHtml(issue.suggestion)}</p>` : ''}
       </article>`).join('');
-  return `<div class="verdict ${result.verdict}">${verdictLabel(result.verdict)}</div>
-    <p class="summary">${escapeHtml(result.summary)}</p>
-    <h2>正确之处</h2>${list(result.strengths, '模型未列出明确的正确之处。')}
-    <h2>问题清单</h2>${issues}
-    <h2>复杂度</h2>
-    <dl><dt>时间</dt><dd>${escapeHtml(result.complexity.time)}</dd><dt>空间</dt><dd>${escapeHtml(result.complexity.space)}</dd></dl>
-    <p>${escapeHtml(result.complexity.assessment)}</p>
-    ${(result.suggestedFix || result.suggestedSnippet) ? `<h2>必要的局部修正</h2>${diffContent(source, result)}` : ''}`;
+  return `${resultBlock('overview', `<div class="verdict ${result.verdict}">${verdictLabel(result.verdict)}</div><p class="summary">${escapeHtml(result.summary)}</p>`, 'result-overview')}
+    ${resultBlock('strengths', `<h2>正确之处</h2>${list(result.strengths, '模型未列出明确的正确之处。')}`)}
+    ${resultBlock('issues', `<h2>问题清单</h2>${issues}`)}
+    ${resultBlock('complexity', `<h2>复杂度</h2><dl><dt>时间</dt><dd>${escapeHtml(result.complexity.time)}</dd><dt>空间</dt><dd>${escapeHtml(result.complexity.space)}</dd></dl><p>${escapeHtml(result.complexity.assessment)}</p>`)}
+    ${(result.suggestedFix || result.suggestedSnippet) ? resultBlock('fix', `<h2>必要的局部修正</h2>${diffContent(source, result)}`) : ''}`;
 }
 
 function thinkingLevelSelect(thinkingLevel: ThinkingLevel): string {
@@ -107,11 +109,11 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
   if (state.kind === 'loading') {
     body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span><button id="cancel" class="secondary">取消</button></header>
       ${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus) : ''}
-      ${state.thinkingStatus && !state.thinkingStatus.complete ? '' : `<section class="live-preview" aria-live="polite"><div id="structured-preview">${previewContent(state.source, state.preview)}</div></section>`}`;
+      ${state.thinkingStatus && !state.thinkingStatus.complete ? '' : `<section class="live-preview" aria-live="polite"><div id="structured-preview" class="result-stack">${previewContent(state.source, state.preview)}</div></section>`}`;
   } else if (state.kind === 'error') {
     body = `<div class="center"><div class="state-icon">!</div><h1>无法完成评审</h1><p>${escapeHtml(state.message)}</p>${reviewControls('重新评审', thinkingLevel)}</div>`;
   } else if (state.kind === 'result') {
-    body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span>${reviewControls('重新评审', thinkingLevel, true, !state.thinkingStatus)}</header>${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus, thinkingLevel) : ''}<section class="live-preview final-result">${resultContent(state.source, state.result)}</section>`;
+    body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span>${reviewControls('重新评审', thinkingLevel, true, !state.thinkingStatus)}</header>${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus, thinkingLevel) : ''}<section class="live-preview final-result result-stack">${resultContent(state.source, state.result)}</section>`;
   } else {
     body = `<div class="center"><div class="state-icon">✓</div><h1>408 Judge</h1><p>${escapeHtml(state.message ?? '打开一道 .cpp 作答，然后从编辑器右键菜单开始评审。')}</p>${reviewControls('评审当前 C++ 作答', thinkingLevel)}</div>`;
   }
@@ -120,6 +122,21 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
   <style>
     :root{color-scheme:light dark}[hidden]{display:none!important}body{padding:16px;color:var(--vscode-foreground);font:13px/1.55 var(--vscode-font-family);overflow-wrap:anywhere}h1{font-size:18px;margin:10px 0 4px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:24px 0 8px;color:var(--vscode-descriptionForeground)}p{margin:6px 0 10px}.center{text-align:center;padding:42px 8px}.state-icon{display:grid;place-items:center;margin:auto;width:42px;height:42px;border:1px solid var(--vscode-focusBorder);border-radius:50%;font-size:20px;color:var(--vscode-focusBorder)}button{border:0;border-radius:3px;padding:6px 12px;color:var(--vscode-button-foreground);background:var(--vscode-button-background);cursor:pointer}button:hover{background:var(--vscode-button-hoverBackground)}button.secondary,.line{color:var(--vscode-textLink-foreground);background:transparent;padding:2px 4px}.review-actions{display:flex;min-width:120px;flex-direction:column;align-items:stretch;gap:5px}.review-actions button{white-space:nowrap}.thinking-level-select{min-height:26px;padding:3px 22px 3px 7px;color:var(--vscode-dropdown-foreground);background:var(--vscode-dropdown-background);border:1px solid var(--vscode-dropdown-border);border-radius:2px;font:12px var(--vscode-font-family);cursor:pointer;outline:none}.thinking-level-select:focus{border-color:var(--vscode-focusBorder)}.review-actions .thinking-level-select{width:100%}.center .review-actions{width:max-content;min-width:172px;margin:18px auto 0}header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:14px}.eyebrow{padding-top:3px;font-family:var(--vscode-editor-font-family);color:var(--vscode-descriptionForeground)}.verdict{display:inline-block;border-radius:999px;padding:4px 10px;font-weight:700}.correct{color:var(--vscode-testing-iconPassed);background:color-mix(in srgb,var(--vscode-testing-iconPassed) 14%,transparent)}.partially_correct{color:var(--vscode-editorWarning-foreground);background:color-mix(in srgb,var(--vscode-editorWarning-foreground) 14%,transparent)}.incorrect{color:var(--vscode-testing-iconFailed);background:color-mix(in srgb,var(--vscode-testing-iconFailed) 14%,transparent)}.insufficient{color:var(--vscode-descriptionForeground);background:var(--vscode-editorWidget-background)}.summary{font-size:14px;margin:14px 0 22px}.muted{color:var(--vscode-descriptionForeground)}ul{padding-left:20px}.issue{border-left:3px solid var(--vscode-descriptionForeground);padding:7px 10px;margin:8px 0;background:var(--vscode-editorWidget-background)}.severity-error{border-color:var(--vscode-testing-iconFailed)}.severity-warning{border-color:var(--vscode-editorWarning-foreground)}.issue-title{display:flex;justify-content:space-between;gap:8px;font-weight:700}.suggestion{color:var(--vscode-descriptionForeground)}dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px}dt{color:var(--vscode-descriptionForeground)}dd{margin:0;font-family:var(--vscode-editor-font-family)}pre{padding:10px;overflow:auto;background:var(--vscode-textCodeBlock-background);font-family:var(--vscode-editor-font-family)}.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--vscode-editorWidget-border);border-top-color:var(--vscode-progressBar-background);border-radius:50%;animation:spin .8s linear infinite}.stream-status{display:flex;align-items:center;gap:8px;margin:12px 0 18px;color:var(--vscode-descriptionForeground)}.thinking-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:12px 0 18px}.thinking-block{min-width:0;flex:1}.thinking-stages{max-height:148px;margin:8px 0 0;padding:0 4px 0 20px;overflow-y:auto;list-style:none;color:var(--vscode-descriptionForeground)}.thinking-stages li{position:relative;padding:2px 0 7px 12px}.thinking-stages li::before{content:'';position:absolute;left:0;top:.65em;width:5px;height:5px;border-radius:50%;background:var(--vscode-descriptionForeground)}.thinking-stages li:not(:last-child)::after{content:'';position:absolute;left:2px;top:1em;bottom:-.35em;width:1px;background:var(--vscode-editorWidget-border)}.thinking-stages li:last-child{color:var(--vscode-foreground)}.thinking-toolbar .stream-status{min-width:0;margin:0;overflow:hidden}.thinking-toolbar #thinking-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.thinking-toolbar .thinking-level-select{width:auto;max-width:142px;flex:0 0 auto}.stream-status #attempt{margin-left:auto}.thinking-complete{color:var(--vscode-descriptionForeground)}.thinking-check{color:var(--vscode-testing-iconPassed);font-weight:700}details{margin:10px 0;border:1px solid var(--vscode-editorWidget-border);border-radius:4px;background:var(--vscode-editorWidget-background)}summary{padding:7px 10px;cursor:pointer;font-weight:600}.stream{margin:0;max-height:38vh;white-space:pre-wrap;color:var(--vscode-descriptionForeground)}.live-preview{margin-top:14px;padding-top:10px;border-top:1px solid var(--vscode-editorWidget-border)}.live-preview-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-weight:700}.live-badge{font-size:10px;font-weight:600;color:var(--vscode-testing-iconPassed);letter-spacing:.08em}.preview-empty,.preview-pending{color:var(--vscode-descriptionForeground)}.typing-dot{display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:50%;background:var(--vscode-progressBar-background);animation:pulse 1.2s ease-in-out infinite}.preview-line{font-weight:400;color:var(--vscode-descriptionForeground)}.diff{overflow:auto;border:1px solid var(--vscode-editorWidget-border);border-radius:4px;background:var(--vscode-editor-background);font:12px/1.65 var(--vscode-editor-font-family)}.diff-table{width:max-content;min-width:100%;border-collapse:collapse;border-spacing:0}.diff-table th{height:24px;padding:0 7px;text-align:left;font:11px var(--vscode-font-family);color:var(--vscode-descriptionForeground);background:var(--vscode-editorGroupHeader-tabsBackground);border-bottom:1px solid var(--vscode-editorWidget-border)}.diff-table th:first-child,.diff-table th:nth-child(2){width:3em;text-align:right}.diff-row td{height:21px;padding:0;border:0}.line-number{min-width:3em;padding:0 7px!important;text-align:right;color:var(--vscode-editorLineNumber-foreground);background:color-mix(in srgb,var(--vscode-editorGutter-background) 92%,transparent);border-right:1px solid var(--vscode-editorWidget-border)!important;user-select:none}.diff-marker{width:1.5em;padding-left:7px!important;font-weight:700;user-select:none}.diff-code{min-width:24em;padding:0 12px 0 2px!important;white-space:pre;overflow-wrap:normal;background:transparent!important}.diff-row.removed{color:var(--vscode-editor-foreground);background:color-mix(in srgb,var(--vscode-gitDecoration-deletedResourceForeground) 16%,var(--vscode-editor-background))}.diff-row.added{color:var(--vscode-editor-foreground);background:color-mix(in srgb,var(--vscode-gitDecoration-addedResourceForeground) 16%,var(--vscode-editor-background))}.diff-row.removed .diff-marker{color:var(--vscode-gitDecoration-deletedResourceForeground)}.diff-row.added .diff-marker{color:var(--vscode-gitDecoration-addedResourceForeground)}.diff-hunk td{height:24px;padding:0 8px;color:var(--vscode-textLink-foreground);background:var(--vscode-editorWidget-background);border-bottom:1px solid var(--vscode-editorWidget-border);white-space:pre}.diff-row.context .diff-code{color:var(--vscode-editor-foreground)}.fireworks-layer{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:1000;contain:strict}.celebration-glow{position:absolute;left:-15%;right:-15%;bottom:-18%;height:58%;background:radial-gradient(ellipse at 50% 100%,rgba(255,183,3,.34),rgba(247,37,133,.13) 37%,transparent 70%);animation:celebration-glow 2.5s ease-out both}.firework-fountain,.firework-particle,.firework-ring,.firework-comet,.firework-ember{position:absolute;left:var(--x);top:var(--y);pointer-events:none}.firework-fountain{width:var(--size);height:calc(var(--size)*3.6);border-radius:999px;background:linear-gradient(to top,transparent,var(--color) 42%,#fff);box-shadow:0 0 9px 2px var(--color);animation:firework-fountain var(--duration) cubic-bezier(.14,.68,.32,1) var(--delay) both}.firework-comet{width:4px;height:34px;border-radius:999px;background:linear-gradient(to top,transparent 4%,var(--color) 68%,#fff);filter:drop-shadow(0 0 6px var(--color));animation:firework-comet .62s cubic-bezier(.2,.72,.25,1) var(--delay) both}.firework-particle{width:var(--size);height:var(--size);border-radius:50%;background:var(--color);box-shadow:0 0 10px 2px var(--color);animation:firework-particle var(--duration) cubic-bezier(.12,.7,.24,1) var(--delay) both}.firework-ring{width:10px;height:10px;margin:-5px;border:2px solid var(--color);border-radius:50%;box-shadow:0 0 12px var(--color);animation:firework-ring .82s ease-out var(--delay) both}.firework-ember{width:3px;height:8px;border-radius:999px;background:var(--color);box-shadow:0 0 8px var(--color);animation:firework-ember 1.35s ease-in var(--delay) both}.verdict.correct.celebrating{animation:verdict-celebrate 1.15s cubic-bezier(.2,.8,.25,1) both}@keyframes celebration-glow{0%{opacity:0;transform:scale(.8)}18%{opacity:1}100%{opacity:0;transform:scale(1.18)}}@keyframes firework-fountain{0%{opacity:0;transform:translate(-50%,0) rotate(var(--rotation)) scale(.35)}8%{opacity:1}52%{opacity:1;transform:translate(calc(-50% + var(--peak-x)),var(--peak-y)) rotate(calc(var(--rotation)*-1)) scale(1)}100%{opacity:0;transform:translate(calc(-50% + var(--end-x)),var(--end-y)) rotate(calc(var(--rotation)*-2.4)) scale(.25)}}@keyframes firework-comet{0%{opacity:0;transform:translate(-50%,0) scaleY(.25)}15%{opacity:1}82%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--tx)),var(--ty)) scaleY(1.25)}}@keyframes firework-particle{0%{opacity:0;transform:translate(-50%,-50%) scale(.15)}10%{opacity:1}68%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(.2)}}@keyframes firework-ring{0%{opacity:1;transform:scale(.2)}100%{opacity:0;transform:scale(10)}}@keyframes firework-ember{0%{opacity:0;transform:translate(-50%,-50%) rotate(0)}18%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) rotate(var(--spin))}}@keyframes verdict-celebrate{0%{transform:scale(1)}28%{transform:scale(1.2);box-shadow:0 0 0 7px color-mix(in srgb,var(--vscode-testing-iconPassed) 18%,transparent)}62%{transform:scale(.97)}100%{transform:scale(1)}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}@media (prefers-reduced-motion:reduce){.fireworks-layer{display:none}.verdict.correct.celebrating{animation:none}}
 
+    .result-stack{display:flex;flex-direction:column;gap:10px}
+    .result-block{padding:13px 14px 12px;border:1px solid color-mix(in srgb,var(--vscode-editorWidget-border) 72%,transparent);border-radius:7px;background:color-mix(in srgb,var(--vscode-editorWidget-background) 58%,transparent)}
+    .result-overview{padding-top:14px;border-color:color-mix(in srgb,var(--vscode-focusBorder) 36%,var(--vscode-editorWidget-border));background:color-mix(in srgb,var(--vscode-editorWidget-background) 78%,transparent)}
+    .result-pending{padding:8px 2px;border-color:transparent;background:transparent}
+    .result-block h2{margin:0 0 9px}
+    .result-block .summary{margin:10px 0 0}
+    .result-block ul{margin:0;padding-left:18px}
+    .result-block dl{margin:0}
+    .result-block>p:last-child{margin-bottom:0}
+    .result-block-enter{animation:result-block-reveal .52s cubic-bezier(.16,1,.3,1) both}
+    .final-result .result-block:nth-child(2){animation-delay:.05s}
+    .final-result .result-block:nth-child(3){animation-delay:.1s}
+    .final-result .result-block:nth-child(4){animation-delay:.15s}
+    .final-result .result-block:nth-child(5){animation-delay:.2s}
+    @keyframes result-block-reveal{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
     .thinking-stages{max-height:none;overflow:visible;padding-left:18px}
     .thinking-stages li{padding:1px 0 18px 14px}
     .thinking-stages li::before{top:.72em}
@@ -134,23 +151,23 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     @keyframes thinking-dot-reveal{from{opacity:0;transform:scale(.35)}to{opacity:1;transform:scale(1)}}
     @keyframes thinking-line-reveal{from{opacity:0;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
     @keyframes thinking-summary-reveal{from{opacity:0;transform:translate3d(0,5px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
-    @media (prefers-reduced-motion:reduce){.thinking-stage-enter .thinking-stage-title,.thinking-stage-enter::before,.thinking-stage-connected::after,.thinking-summary-batch{animation:none}}
+    @media (prefers-reduced-motion:reduce){.result-block-enter,.thinking-stage-enter .thinking-stage-title,.thinking-stage-enter::before,.thinking-stage-connected::after,.thinking-summary-batch{animation:none}}
   </style></head><body>${body}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingDone=thinkingLabel?.dataset.complete==='true';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent='Thinking · '+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
-    const reduceThinkingMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let autoFollowThinking=true;
-    let followThinkingFrame=0;
-    const updateThinkingFollow=()=>{autoFollowThinking=window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-120};
-    const followThinkingOutput=()=>{
-      if(!autoFollowThinking||followThinkingFrame)return;
-      followThinkingFrame=requestAnimationFrame(()=>{
-        followThinkingFrame=0;
-        window.scrollTo({top:document.documentElement.scrollHeight,behavior:reduceThinkingMotion?'auto':'smooth'});
+    const reduceOutputMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let autoFollowOutput=true;
+    let followOutputFrame=0;
+    const updateOutputFollow=()=>{autoFollowOutput=window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-120};
+    const followLiveOutput=()=>{
+      if(!autoFollowOutput||followOutputFrame)return;
+      followOutputFrame=requestAnimationFrame(()=>{
+        followOutputFrame=0;
+        window.scrollTo({top:document.documentElement.scrollHeight,behavior:reduceOutputMotion?'auto':'smooth'});
       });
     };
-    window.addEventListener('scroll',updateThinkingFollow,{passive:true});
-    window.addEventListener('resize',updateThinkingFollow);
+    window.addEventListener('scroll',updateOutputFollow,{passive:true});
+    window.addEventListener('resize',updateOutputFollow);
     document.getElementById('review')?.addEventListener('click',()=>vscode.postMessage({type:'review'}));
     document.getElementById('thinking-level')?.addEventListener('change',event=>vscode.postMessage({type:'setThinkingLevel',level:event.target.value}));
     document.getElementById('cancel')?.addEventListener('click',()=>vscode.postMessage({type:'cancel'}));
@@ -161,6 +178,23 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
       badge.classList.add('celebrating');setTimeout(()=>badge.classList.remove('celebrating'),1300);
       window.launchJudgeConfetti();
     }
+    const syncResultBlocks=(container,html)=>{
+      const template=document.createElement('template');
+      template.innerHTML=html;
+      const incoming=Array.from(template.content.children).filter(block=>block.dataset.resultBlock);
+      const incomingKeys=new Set(incoming.map(block=>block.dataset.resultBlock));
+      incoming.forEach((next,index)=>{
+        const key=next.dataset.resultBlock;
+        let current=Array.from(container.children).find(block=>block.dataset.resultBlock===key);
+        if(current){
+          if(current.className!==next.className)current.className=next.className;
+          if(current.innerHTML!==next.innerHTML)current.innerHTML=next.innerHTML;
+        }else current=next;
+        const atIndex=container.children[index];
+        if(current!==atIndex)container.insertBefore(current,atIndex??null);
+      });
+      Array.from(container.children).forEach(block=>{if(!incomingKeys.has(block.dataset.resultBlock))block.remove()});
+    };
     window.addEventListener('message',event=>{
       if(event.data?.type!=='stream')return;
       const spinner=document.getElementById('thinking-spinner');
@@ -210,9 +244,12 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
           while(item.querySelectorAll('.thinking-stage-detail').length>details.length)item.lastElementChild?.remove();
         }
         while(stages.children.length>incoming.length)stages.lastElementChild?.remove();
-        followThinkingOutput();
+        followLiveOutput();
       }
-      if(preview)preview.innerHTML=event.data.previewHtml;
+      if(preview&&typeof event.data.previewHtml==='string'){
+        syncResultBlocks(preview,event.data.previewHtml);
+        followLiveOutput();
+      }
       if(attempt)attempt.textContent=event.data.attempt>1?('重试 '+event.data.attempt+'/2'):'';
       if(event.data.celebrateCorrect)launchConfetti();
     });
