@@ -34,7 +34,7 @@ describe('diff webview markup', () => {
       preview: { verdict: 'incorrect', summary: '返回值仍在生成' }, attempt: 1,
       thinkingStatus: {
         label: '核对算法逻辑',
-        stages: [{ title: '核对算法逻辑', detail: '检查主要控制流和关键边界条件。' }],
+        stages: [{ title: '核对算法逻辑', details: ['检查主要控制流和关键边界条件。', '继续确认异常输入的处理路径。'] }],
         complete: false, elapsedMs: 1200, attempt: 1
       }
     }, 'nonce');
@@ -42,16 +42,16 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('返回值仍在生成');
     expect(html).toContain('<strong class="thinking-stage-title">核对算法逻辑</strong>');
     expect(html).toContain('<p class="thinking-stage-detail">检查主要控制流和关键边界条件。</p>');
+    expect(html).toContain('<p class="thinking-stage-detail">继续确认异常输入的处理路径。</p>');
     expect(html).toContain('.thinking-stages{max-height:none;overflow:visible');
     expect(html).toContain("document.createElement('li')");
     expect(html).toContain("window.addEventListener('scroll',updateThinkingFollow,{passive:true})");
     expect(html).toContain("window.scrollTo({top:document.documentElement.scrollHeight,behavior:'auto'})");
     expect(html).toContain('followThinkingOutput()');
-    expect(html).toContain('.thinking-stream-fragment{animation:thinking-stream-fade .72s cubic-bezier(.2,.7,.2,1) both}');
-    expect(html).toContain("if(nextDetail.startsWith(previousDetail)&&nextDetail.length>previousDetail.length)");
-    expect(html).toContain("fragment.className='thinking-stream-fragment'");
-    expect(html).not.toContain('detail.textContent=previousDetail');
-    expect(html).toContain('@media (prefers-reduced-motion:reduce){.thinking-stream-fragment{animation:none}}');
+    expect(html).toContain('.thinking-summary-batch{animation:thinking-summary-reveal .72s cubic-bezier(.2,.7,.2,1) both}');
+    expect(html).toContain("paragraph.className='thinking-stage-detail thinking-summary-batch'");
+    expect(html).not.toContain('thinking-stream-fragment');
+    expect(html).toContain('@media (prefers-reduced-motion:reduce){.thinking-summary-batch{animation:none}}');
     expect(html).not.toContain('class="caret"');
     expect(html).not.toContain('live-value');
     expect(html).not.toContain('id="conclusion"');
@@ -71,7 +71,7 @@ describe('diff webview markup', () => {
     provider.setState({
       kind: 'loading', fileName: 'answer.cpp', source: '', preview: {}, attempt: 1,
       thinkingStatus: {
-        label: '检查算法逻辑', stages: [{ title: '检查算法逻辑', detail: '核对主要控制流。' }],
+        label: '检查算法逻辑', stages: [{ title: '检查算法逻辑', details: ['核对主要控制流。'] }],
         complete: false, elapsedMs: 1200, attempt: 1
       }
     });
@@ -118,8 +118,8 @@ describe('diff webview markup', () => {
       thinkingStatus: {
         label: '思考完成',
         stages: [
-          { title: '核对算法逻辑', detail: '检查主要控制流。' },
-          { title: '验证边界条件', detail: '确认边界输入的行为。' }
+          { title: '核对算法逻辑', details: ['检查主要控制流。'] },
+          { title: '验证边界条件', details: ['确认边界输入的行为。'] }
         ],
         complete: true, elapsedMs: 21000, attempt: 1
       },

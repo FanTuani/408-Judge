@@ -92,7 +92,7 @@ function thinkingLevelSelect(thinkingLevel: ThinkingLevel): string {
 function thinkingStatusContent(status: ThinkingStatus, thinkingLevel?: ThinkingLevel): string {
   const elapsedSeconds = Math.floor(status.elapsedMs / 1000);
   const text = status.complete ? `思考完成 · ${elapsedSeconds} 秒` : `Thinking · ${elapsedSeconds} 秒`;
-  const stages = status.stages.map(stage => `<li data-stage-title="${escapeHtml(stage.title)}"><strong class="thinking-stage-title">${escapeHtml(stage.title)}</strong><p class="thinking-stage-detail">${escapeHtml(stage.detail)}</p></li>`).join('');
+  const stages = status.stages.map(stage => `<li data-stage-title="${escapeHtml(stage.title)}"><strong class="thinking-stage-title">${escapeHtml(stage.title)}</strong>${stage.details.map(detail => `<p class="thinking-stage-detail">${escapeHtml(detail)}</p>`).join('')}</li>`).join('');
   const stageList = status.complete ? '' : `<ol id="thinking-stages" class="thinking-stages">${stages}</ol>`;
   const statusHtml = `<div class="thinking-block"><div class="stream-status${status.complete ? ' thinking-complete' : ''}"><span id="thinking-spinner" class="spinner"${status.complete ? ' hidden' : ''}></span><span id="thinking-check" class="thinking-check"${status.complete ? '' : ' hidden'}>✓</span><strong id="thinking-label" data-elapsed-ms="${status.elapsedMs}" data-complete="${status.complete}">${escapeHtml(text)}</strong><span id="attempt">${status.attempt > 1 ? `重试 ${status.attempt}/2` : ''}</span></div>${stageList}</div>`;
   return thinkingLevel ? `<div class="thinking-toolbar">${statusHtml}${thinkingLevelSelect(thinkingLevel)}</div>` : statusHtml;
@@ -126,9 +126,9 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .thinking-stages li:not(:last-child)::after{bottom:-.15em}
     .thinking-stage-title{display:block;color:var(--vscode-foreground);font-size:14px;line-height:1.45}
     .thinking-stage-detail{margin:5px 0 0;color:var(--vscode-descriptionForeground);font-size:12px;line-height:1.55}
-    .thinking-stream-fragment{animation:thinking-stream-fade .72s cubic-bezier(.2,.7,.2,1) both}
-    @keyframes thinking-stream-fade{0%{opacity:0;filter:blur(1.8px)}45%{opacity:.62;filter:blur(.55px)}100%{opacity:1;filter:blur(0)}}
-    @media (prefers-reduced-motion:reduce){.thinking-stream-fragment{animation:none}}
+    .thinking-summary-batch{animation:thinking-summary-reveal .72s cubic-bezier(.2,.7,.2,1) both}
+    @keyframes thinking-summary-reveal{0%{opacity:0;filter:blur(1.8px)}45%{opacity:.62;filter:blur(.55px)}100%{opacity:1;filter:blur(0)}}
+    @media (prefers-reduced-motion:reduce){.thinking-summary-batch{animation:none}}
   </style></head><body>${body}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingDone=thinkingLabel?.dataset.complete==='true';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent='Thinking · '+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
@@ -182,23 +182,23 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
             item.dataset.stageTitle=stage.title;
             const title=document.createElement('strong');
             title.className='thinking-stage-title';
-            const detail=document.createElement('p');
-            detail.className='thinking-stage-detail';
-            item.append(title,detail);
+            item.appendChild(title);
             stages.appendChild(item);
           }
           item.querySelector('.thinking-stage-title').textContent=stage.title;
-          const detail=item.querySelector('.thinking-stage-detail');
-          const previousDetail=detail.textContent||'';
-          const nextDetail=typeof stage.detail==='string'?stage.detail:'';
-          if(nextDetail.startsWith(previousDetail)&&nextDetail.length>previousDetail.length){
-            const fragment=document.createElement('span');
-            fragment.className='thinking-stream-fragment';
-            fragment.textContent=nextDetail.slice(previousDetail.length);
-            detail.appendChild(fragment);
-          }else if(nextDetail!==previousDetail){
-            detail.textContent=nextDetail;
+          const details=Array.isArray(stage.details)?stage.details:[];
+          let detailIndex=0;
+          for(;detailIndex<details.length;detailIndex++){
+            const text=typeof details[detailIndex]==='string'?details[detailIndex]:'';
+            const rendered=item.querySelectorAll('.thinking-stage-detail')[detailIndex];
+            if(rendered&&rendered.textContent===text)continue;
+            while(item.querySelectorAll('.thinking-stage-detail').length>detailIndex)item.lastElementChild?.remove();
+            const paragraph=document.createElement('p');
+            paragraph.className='thinking-stage-detail thinking-summary-batch';
+            paragraph.textContent=text;
+            item.appendChild(paragraph);
           }
+          while(item.querySelectorAll('.thinking-stage-detail').length>details.length)item.lastElementChild?.remove();
         }
         while(stages.children.length>incoming.length)stages.lastElementChild?.remove();
         followThinkingOutput();

@@ -48,7 +48,7 @@ describe('thinking summary', () => {
     expect(fetcher).toHaveBeenCalledWith('https://example.test/chat/completions', expect.anything());
   });
 
-  it('streams the current stage detail as it is generated', async () => {
+  it('publishes a complete stage only after the streamed JSON finishes', async () => {
     const encoder = new TextEncoder();
     const chunks = [
       '{"title":"检查边界',
@@ -64,17 +64,12 @@ describe('thinking summary', () => {
         controller.close();
       }
     });
-    const progress: Array<{ title: string; detail: string }> = [];
     const stage = await requestThinkingSummary({
       apiKey: 'secret', baseUrl: 'https://example.test', model: 'deepseek-v4-flash',
-      reasoning: '分析循环边界', previousSummary: 'Thinking', timeoutSeconds: 1,
-      onProgress: value => progress.push(value)
+      reasoning: '分析循环边界', previousSummary: 'Thinking', timeoutSeconds: 1
     }, async () => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
 
     expect(stage).toEqual({ title: '检查边界条件', detail: '核对数组范围和循环终止条件。' });
-    expect(new Set(progress.map(value => value.title))).toEqual(new Set(['检查边界条件']));
-    expect(progress.map(value => value.detail)).toContain('核对数组');
-    expect(progress.at(-1)?.detail).toBe('核对数组范围和循环终止条件。');
   });
 
   it('does not start a sidecar request or scheduler after prior cancellation', async () => {
@@ -125,20 +120,26 @@ describe('thinking summary', () => {
     const tracker = new ThinkingSummaryTracker(1_000);
     expect(tracker.update('', 1, 1_500)).toMatchObject({ label: 'Thinking', stages: [] });
     expect(tracker.applySummary({ title: '检查循环边界', detail: '核对循环范围。' }, 1, 1_800)).toMatchObject({
-      label: '检查循环边界', stages: [{ title: '检查循环边界', detail: '核对循环范围。' }]
+      label: '检查循环边界', stages: [{ title: '检查循环边界', details: ['核对循环范围。'] }]
     });
     expect(tracker.applySummary({ title: '检查循环边界', detail: '继续核对终止条件。' }, 1, 1_900).stages).toEqual([
-      { title: '检查循环边界', detail: '继续核对终止条件。' }
+      { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。'] }
     ]);
     expect(tracker.applySummary({ title: '验证返回值', detail: '确认函数结果符合目标。' }, 1, 2_000).stages).toEqual([
-      { title: '检查循环边界', detail: '继续核对终止条件。' },
-      { title: '验证返回值', detail: '确认函数结果符合目标。' }
+      { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。'] },
+      { title: '验证返回值', details: ['确认函数结果符合目标。'] }
     ]);
     expect(tracker.applySummary({ title: '验证返回值语义', detail: '继续核对返回值约定。' }, 1, 2_100).stages).toEqual([
-      { title: '检查循环边界', detail: '继续核对终止条件。' },
-      { title: '验证返回值', detail: '确认函数结果符合目标。' },
-      { title: '验证返回值语义', detail: '继续核对返回值约定。' }
+      { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。'] },
+      { title: '验证返回值', details: ['确认函数结果符合目标。'] },
+      { title: '验证返回值语义', details: ['继续核对返回值约定。'] }
     ]);
+    expect(tracker.applySummary({ title: '检查循环边界', detail: '复核极端输入下的循环范围。' }, 1, 2_200).stages).toEqual([
+      { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。', '复核极端输入下的循环范围。'] },
+      { title: '验证返回值', details: ['确认函数结果符合目标。'] },
+      { title: '验证返回值语义', details: ['继续核对返回值约定。'] }
+    ]);
+    expect(tracker.applySummary({ title: '检查循环边界', detail: '复核极端输入下的循环范围。' }, 1, 2_300).stages[0].details).toHaveLength(3);
     expect(tracker.update('{', 1, 2_700)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
     expect(tracker.update('{"verdict"', 1, 8_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
     expect(tracker.finish(12_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
