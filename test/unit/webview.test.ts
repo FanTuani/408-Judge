@@ -76,13 +76,14 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('{&quot;verdict&quot;');
   });
 
-  it('switches from the thinking-only timeline to the streamed conclusion', async () => {
+  it('publishes only completed result blocks and finalizes without rerendering the page', async () => {
     const { JudgeViewProvider } = await import('../../src/webview.js');
+    const messages: Array<{ final?: boolean; previewHtml?: string; headerActionsHtml?: string }> = [];
     const webview = {
       options: {}, html: '', cspSource: 'vscode-webview://unit-test',
       asWebviewUri: (uri: { toString(): string }) => uri,
       onDidReceiveMessage: () => ({ dispose() {} }),
-      postMessage: async () => true
+      postMessage: async (message: { final?: boolean; previewHtml?: string; headerActionsHtml?: string }) => { messages.push(message); return true; }
     };
     const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {});
     provider.resolveWebviewView({ webview } as never);
@@ -100,8 +101,57 @@ describe('diff webview markup', () => {
       thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 1800, attempt: 1 }
     });
     expect(webview.html).toContain('id="structured-preview"');
-    expect(webview.html).toContain('结论开始生成');
+    expect(webview.html).not.toContain('结论开始生成');
+    expect(webview.html).toContain('正在整理判题结果');
+
+    provider.setState({
+      kind: 'loading', fileName: 'answer.cpp', source: '',
+      preview: { verdict: 'correct', summary: '结论已生成', strengths: [] }, attempt: 1,
+      thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 1900, attempt: 1 }
+    });
+    expect(messages.at(-1)?.previewHtml).toContain('data-result-block="overview"');
+    expect(messages.at(-1)?.previewHtml).not.toContain('data-result-block="strengths"');
+
+    const htmlBeforeFinal = webview.html;
+    provider.setState({
+      kind: 'result', fileName: 'answer.cpp', source: '',
+      thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 2000, attempt: 1 },
+      result: {
+        verdict: 'correct', summary: '结论已生成', strengths: [], issues: [],
+        complexity: { time: 'O(1)', space: 'O(1)', assessment: '合理' }, suggestedSnippet: ''
+      }
+    });
+    expect(webview.html).toBe(htmlBeforeFinal);
+    expect(messages.at(-1)).toMatchObject({ final: true });
+    expect(messages.at(-1)?.previewHtml).toContain('data-result-block="complexity"');
+    expect(messages.at(-1)?.headerActionsHtml).toContain('id="review"');
     provider.dispose();
+  });
+
+  it('buffers partial result fields until the next block starts', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const partialOverview = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: '', attempt: 1,
+      preview: { verdict: 'incorrect', summary: '尚未完成的总评' }
+    }, 'nonce');
+    expect(partialOverview).not.toContain('尚未完成的总评');
+    expect(partialOverview).toContain('正在整理判题结果');
+
+    const partialStrengths = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: '', attempt: 1,
+      preview: { verdict: 'incorrect', summary: '完整总评', strengths: ['尚未完成的优点'] }
+    }, 'nonce');
+    expect(partialStrengths).toContain('完整总评');
+    expect(partialStrengths).not.toContain('尚未完成的优点');
+    expect(partialStrengths).not.toContain('data-result-block="strengths"');
+
+    const completedStrengths = renderWebview({
+      kind: 'loading', fileName: 'answer.cpp', source: '', attempt: 1,
+      preview: { verdict: 'incorrect', summary: '完整总评', strengths: ['完整优点'], issues: [] }
+    }, 'nonce');
+    expect(completedStrengths).toContain('data-result-block="strengths"');
+    expect(completedStrengths).toContain('完整优点');
+    expect(completedStrengths).not.toContain('data-result-block="issues"');
   });
 
   it('does not show an explanatory banner when thinking is disabled', async () => {
@@ -113,7 +163,8 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('思考过程');
     expect(html).not.toContain('判题结论');
     expect(html).not.toContain('class="live-badge"');
-    expect(html).toContain('<section class="live-preview" aria-live="polite">');
+    expect(html).toContain('<section class="live-preview" aria-live="polite" aria-busy="true">');
+    expect(html).toContain('class="review-actions pending-review-actions"');
   });
 
   it('shows a compact thinking summary instead of raw reasoning', async () => {
@@ -186,7 +237,9 @@ describe('diff webview markup', () => {
     provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: {}, attempt: 1 });
     provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: { verdict: 'correct' }, attempt: 1 });
     provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: { verdict: 'correct', summary: '仍在输出' }, attempt: 1 });
-    expect(messages.map(message => message.celebrateCorrect)).toEqual([true, false]);
+    provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: { verdict: 'correct', summary: '完整总评', strengths: [] }, attempt: 1 });
+    provider.setState({ kind: 'loading', fileName: 'answer.cpp', source: '', preview: { verdict: 'correct', summary: '完整总评', strengths: ['优点'] }, attempt: 1 });
+    expect(messages.map(message => message.celebrateCorrect)).toEqual([false, false, true, false]);
     provider.dispose();
   });
 

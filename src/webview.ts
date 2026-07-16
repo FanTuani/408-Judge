@@ -43,33 +43,24 @@ function diffContent(source: string, result: JudgeResult): string {
   return `${result.suggestedFix.explanation ? `<p>${escapeHtml(result.suggestedFix.explanation)}</p>` : ''}<div class="diff" role="region" aria-label="最小修复 diff"><table class="diff-table"><thead><tr><th>旧</th><th>新</th><th></th><th>最小修复</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function previewContent(source: string, preview: JudgePreview): string {
+function previewContent(preview: JudgePreview): string {
   if (Object.keys(preview).length === 0) return resultBlock('pending', '<p class="preview-empty"><span class="typing-dot"></span>等待结构化结论…</p>', 'result-pending');
   const header = preview.verdict ? `<div class="verdict ${preview.verdict}">${verdictLabel(preview.verdict)}</div>` : '<span class="preview-pending">结论生成中…</span>';
   const summary = typeof preview.summary === 'string' ? `<p class="summary">${escapeHtml(preview.summary)}</p>` : '';
-  const overview = resultBlock('overview', `${header}${summary}`, 'result-overview');
-  const strengths = preview.strengths ? resultBlock('strengths', `<h2>正确之处</h2>${list(preview.strengths, '正在生成…')}`) : '';
-  const issues = preview.issues ? resultBlock('issues', `<h2>问题清单</h2>${preview.issues.length === 0 ? '<p class="muted">暂未生成问题。</p>' : preview.issues.map(issue => `<article class="issue severity-${escapeHtml(issue.severity ?? 'info')}"><div class="issue-title"><span>${escapeHtml(issue.title ?? '问题生成中…')}</span>${issue.line ? `<span class="preview-line">第 ${issue.line} 行</span>` : ''}</div>${issue.description ? `<p>${escapeHtml(issue.description)}</p>` : ''}${issue.suggestion ? `<p class="suggestion"><strong>建议：</strong>${escapeHtml(issue.suggestion)}</p>` : ''}</article>`).join('')}`) : '';
-  const complexity = preview.complexity ? resultBlock('complexity', `<h2>复杂度</h2><dl>${preview.complexity.time ? `<dt>时间</dt><dd>${escapeHtml(preview.complexity.time)}</dd>` : ''}${preview.complexity.space ? `<dt>空间</dt><dd>${escapeHtml(preview.complexity.space)}</dd>` : ''}</dl>${preview.complexity.assessment ? `<p>${escapeHtml(preview.complexity.assessment)}</p>` : ''}`) : '';
-  let fix = '';
-  const streamedFix = preview.suggestedFix;
-  if (streamedFix || preview.suggestedSnippet) {
-    const ready = streamedFix && typeof streamedFix.startLine === 'number' && typeof streamedFix.endLine === 'number' && typeof streamedFix.replacement === 'string' && streamedFix.replacement.length > 0;
-    if (ready) {
-      const resultLike: JudgeResult = {
-        verdict: preview.verdict ?? 'insufficient', summary: '', strengths: [], issues: [],
-        complexity: { time: '', space: '', assessment: '' }, suggestedSnippet: streamedFix.replacement!,
-        suggestedFix: {
-          startLine: streamedFix.startLine!, endLine: streamedFix.endLine!, original: streamedFix.original ?? '',
-          replacement: streamedFix.replacement!, explanation: streamedFix.explanation ?? ''
-        }
-      };
-      fix = resultBlock('fix', `<h2>必要的局部修正</h2>${diffContent(source, resultLike)}`);
-    } else {
-      fix = resultBlock('fix', '<h2>必要的局部修正</h2><p class="muted">正在生成并定位最小修复…</p>');
-    }
-  }
-  return `${overview}${strengths}${issues}${complexity}${fix}`;
+  const overview = preview.strengths !== undefined ? resultBlock('overview', `${header}${summary}`, 'result-overview') : '';
+  const strengths = preview.issues !== undefined && preview.strengths !== undefined
+    ? resultBlock('strengths', `<h2>正确之处</h2>${list(preview.strengths, '模型未列出明确的正确之处。')}`)
+    : '';
+  const issues = preview.complexity !== undefined && preview.issues !== undefined
+    ? resultBlock('issues', `<h2>问题清单</h2>${preview.issues.length === 0 ? '<p class="muted">未发现需要单列的问题。</p>' : preview.issues.map(issue => `<article class="issue severity-${escapeHtml(issue.severity ?? 'info')}"><div class="issue-title"><span>${escapeHtml(issue.title ?? '未命名问题')}</span>${issue.line ? `<span class="preview-line">第 ${issue.line} 行</span>` : ''}</div>${issue.description ? `<p>${escapeHtml(issue.description)}</p>` : ''}${issue.suggestion ? `<p class="suggestion"><strong>建议：</strong>${escapeHtml(issue.suggestion)}</p>` : ''}</article>`).join('')}`)
+    : '';
+  const complexityComplete = preview.suggestedSnippet !== undefined || preview.suggestedFix !== undefined;
+  const complexity = complexityComplete && preview.complexity
+    ? resultBlock('complexity', `<h2>复杂度</h2><dl>${preview.complexity.time ? `<dt>时间</dt><dd>${escapeHtml(preview.complexity.time)}</dd>` : ''}${preview.complexity.space ? `<dt>空间</dt><dd>${escapeHtml(preview.complexity.space)}</dd>` : ''}</dl>${preview.complexity.assessment ? `<p>${escapeHtml(preview.complexity.assessment)}</p>` : ''}`)
+    : '';
+  return overview || strengths || issues || complexity
+    ? `${overview}${strengths}${issues}${complexity}`
+    : resultBlock('pending', '<p class="preview-empty"><span class="typing-dot"></span>正在整理判题结果…</p>', 'result-pending');
 }
 
 function resultContent(source: string, result: JudgeResult): string {
@@ -91,13 +82,13 @@ function thinkingLevelSelect(thinkingLevel: ThinkingLevel): string {
   return `<select id="thinking-level" class="thinking-level-select" aria-label="思考强度" title="选择下一次评审的思考强度"><option value="disabled"${thinkingLevel === 'disabled' ? ' selected' : ''}>思考：关闭</option><option value="high"${thinkingLevel === 'high' ? ' selected' : ''}>思考：高强度</option><option value="max"${thinkingLevel === 'max' ? ' selected' : ''}>思考：最大强度</option></select>`;
 }
 
-function thinkingStatusContent(status: ThinkingStatus, thinkingLevel?: ThinkingLevel): string {
+function thinkingStatusContent(status: ThinkingStatus, thinkingLevel?: ThinkingLevel, hideThinkingLevel = false): string {
   const elapsedSeconds = Math.floor(status.elapsedMs / 1000);
   const text = status.complete ? `思考完成 · ${elapsedSeconds} 秒` : `Thinking · ${elapsedSeconds} 秒`;
   const stages = status.stages.map(stage => `<li data-stage-title="${escapeHtml(stage.title)}"><strong class="thinking-stage-title">${escapeHtml(stage.title)}</strong>${stage.details.map(detail => `<p class="thinking-stage-detail">${escapeHtml(detail)}</p>`).join('')}</li>`).join('');
   const stageList = status.complete ? '' : `<ol id="thinking-stages" class="thinking-stages">${stages}</ol>`;
   const statusHtml = `<div class="thinking-block"><div class="stream-status${status.complete ? ' thinking-complete' : ''}"><span id="thinking-spinner" class="spinner"${status.complete ? ' hidden' : ''}></span><span id="thinking-check" class="thinking-check"${status.complete ? '' : ' hidden'}>✓</span><strong id="thinking-label" data-elapsed-ms="${status.elapsedMs}" data-complete="${status.complete}">${escapeHtml(text)}</strong><span id="attempt">${status.attempt > 1 ? `重试 ${status.attempt}/2` : ''}</span></div>${stageList}</div>`;
-  return thinkingLevel ? `<div class="thinking-toolbar">${statusHtml}${thinkingLevelSelect(thinkingLevel)}</div>` : statusHtml;
+  return thinkingLevel ? `<div class="thinking-toolbar${hideThinkingLevel ? ' thinking-pending-controls' : ''}">${statusHtml}${thinkingLevelSelect(thinkingLevel)}</div>` : statusHtml;
 }
 
 function reviewControls(label: string, thinkingLevel: ThinkingLevel, secondary = false, showThinkingLevel = true): string {
@@ -107,13 +98,16 @@ function reviewControls(label: string, thinkingLevel: ThinkingLevel, secondary =
 export function renderWebview(state: ViewState, nonce: string, celebrateCorrect = false, confettiScriptUri = '', cspSource = '', thinkingLevel: ThinkingLevel = 'high'): string {
   let body: string;
   if (state.kind === 'loading') {
-    body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span><button id="cancel" class="secondary">取消</button></header>
-      ${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus) : ''}
-      ${state.thinkingStatus && !state.thinkingStatus.complete ? '' : `<section class="live-preview" aria-live="polite"><div id="structured-preview" class="result-stack">${previewContent(state.source, state.preview)}</div></section>`}`;
+    const loadingActions = state.thinkingStatus
+      ? '<button id="cancel" class="secondary">取消</button>'
+      : `<div class="review-actions pending-review-actions"><button id="cancel" class="secondary">取消</button>${thinkingLevelSelect(thinkingLevel)}</div>`;
+    body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span><div id="header-actions">${loadingActions}</div></header>
+      ${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus, thinkingLevel, true) : ''}
+      ${state.thinkingStatus && !state.thinkingStatus.complete ? '' : `<section class="live-preview" aria-live="polite" aria-busy="true"><div id="structured-preview" class="result-stack">${previewContent(state.preview)}</div></section>`}`;
   } else if (state.kind === 'error') {
     body = `<div class="center"><div class="state-icon">!</div><h1>无法完成评审</h1><p>${escapeHtml(state.message)}</p>${reviewControls('重新评审', thinkingLevel)}</div>`;
   } else if (state.kind === 'result') {
-    body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span>${reviewControls('重新评审', thinkingLevel, true, !state.thinkingStatus)}</header>${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus, thinkingLevel) : ''}<section class="live-preview final-result result-stack">${resultContent(state.source, state.result)}</section>`;
+    body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span><div id="header-actions">${reviewControls('重新评审', thinkingLevel, true, !state.thinkingStatus)}</div></header>${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus, thinkingLevel) : ''}<section class="live-preview final-result result-stack">${resultContent(state.source, state.result)}</section>`;
   } else {
     body = `<div class="center"><div class="state-icon">✓</div><h1>408 Judge</h1><p>${escapeHtml(state.message ?? '打开一道 .cpp 作答，然后从编辑器右键菜单开始评审。')}</p>${reviewControls('评审当前 C++ 作答', thinkingLevel)}</div>`;
   }
@@ -131,6 +125,8 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .result-block ul{margin:0;padding-left:18px}
     .result-block dl{margin:0}
     .result-block>p:last-child{margin-bottom:0}
+    #header-actions{display:flex;min-width:120px;justify-content:flex-end}
+    .thinking-pending-controls .thinking-level-select,.pending-review-actions .thinking-level-select{visibility:hidden;pointer-events:none}
     .result-block-enter{animation:result-block-reveal .52s cubic-bezier(.16,1,.3,1) both}
     .final-result .result-block:nth-child(2){animation-delay:.05s}
     .final-result .result-block:nth-child(3){animation-delay:.1s}
@@ -168,10 +164,13 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     };
     window.addEventListener('scroll',updateOutputFollow,{passive:true});
     window.addEventListener('resize',updateOutputFollow);
-    document.getElementById('review')?.addEventListener('click',()=>vscode.postMessage({type:'review'}));
-    document.getElementById('thinking-level')?.addEventListener('change',event=>vscode.postMessage({type:'setThinkingLevel',level:event.target.value}));
-    document.getElementById('cancel')?.addEventListener('click',()=>vscode.postMessage({type:'cancel'}));
-    document.querySelectorAll('[data-line]').forEach(el=>el.addEventListener('click',()=>vscode.postMessage({type:'openLine',line:Number(el.dataset.line)})));
+    const bindControls=(root=document)=>{
+      root.querySelector('#review')?.addEventListener('click',()=>vscode.postMessage({type:'review'}));
+      root.querySelector('#thinking-level')?.addEventListener('change',event=>vscode.postMessage({type:'setThinkingLevel',level:event.target.value}));
+      root.querySelector('#cancel')?.addEventListener('click',()=>vscode.postMessage({type:'cancel'}));
+      root.querySelectorAll('[data-line]').forEach(el=>el.addEventListener('click',()=>vscode.postMessage({type:'openLine',line:Number(el.dataset.line)})));
+    };
+    bindControls();
     function launchConfetti(){
       const badge=document.querySelector('.verdict.correct');
       if(!badge||typeof window.launchJudgeConfetti!=='function')return;
@@ -200,6 +199,7 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
       const spinner=document.getElementById('thinking-spinner');
       const check=document.getElementById('thinking-check');
       const preview=document.getElementById('structured-preview');
+      const headerActions=document.getElementById('header-actions');
       const attempt=document.getElementById('attempt');
       const stages=document.getElementById('thinking-stages');
       if(thinkingLabel&&typeof event.data.thinkingElapsedMs==='number'){
@@ -249,6 +249,15 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
       if(preview&&typeof event.data.previewHtml==='string'){
         syncResultBlocks(preview,event.data.previewHtml);
         followLiveOutput();
+      }
+      if(event.data.final){
+        if(headerActions&&typeof event.data.headerActionsHtml==='string'){
+          headerActions.innerHTML=event.data.headerActionsHtml;
+          bindControls(headerActions);
+        }
+        document.querySelector('.thinking-pending-controls')?.classList.remove('thinking-pending-controls');
+        preview?.closest('.live-preview')?.setAttribute('aria-busy','false');
+        if(preview)bindControls(preview);
       }
       if(attempt)attempt.textContent=event.data.attempt>1?('重试 '+event.data.attempt+'/2'):'';
       if(event.data.celebrateCorrect)launchConfetti();
@@ -300,17 +309,29 @@ export class JudgeViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (state.kind === 'loading' && state.attempt === 1 && Object.keys(state.preview).length === 0) this.celebratedCorrect = false;
     const thinkingJustCompleted = previous.kind === 'loading' && state.kind === 'loading'
       && previous.thinkingStatus?.complete === false && state.thinkingStatus?.complete === true;
+    if (this.view && previous.kind === 'loading' && state.kind === 'result') {
+      const celebrateCorrect = this.consumeCorrectCelebration();
+      void this.view.webview.postMessage({
+        type: 'stream', final: true,
+        thinkingText: state.thinkingStatus ? `思考完成 · ${Math.floor(state.thinkingStatus.elapsedMs / 1000)} 秒` : undefined,
+        thinkingStages: state.thinkingStatus?.stages ?? [], thinkingElapsedMs: state.thinkingStatus?.elapsedMs,
+        thinkingComplete: true, previewHtml: resultContent(state.source, state.result),
+        headerActionsHtml: reviewControls('重新评审', this.thinkingLevel, true, !state.thinkingStatus),
+        attempt: previous.attempt, celebrateCorrect
+      });
+      return;
+    }
     if (this.view && previous.kind === 'loading' && state.kind === 'loading' && !thinkingJustCompleted) {
       const thinkingText = state.thinkingStatus
         ? state.thinkingStatus.complete
           ? `思考完成 · ${Math.floor(state.thinkingStatus.elapsedMs / 1000)} 秒`
           : `Thinking · ${Math.floor(state.thinkingStatus.elapsedMs / 1000)} 秒`
         : undefined;
-      const celebrateCorrect = this.consumeCorrectCelebration();
+      const celebrateCorrect = state.preview.strengths !== undefined && this.consumeCorrectCelebration();
       void this.view.webview.postMessage({
         type: 'stream', thinkingText, thinkingStages: state.thinkingStatus?.stages ?? [], thinkingElapsedMs: state.thinkingStatus?.elapsedMs,
         thinkingComplete: state.thinkingStatus?.complete ?? false,
-        previewHtml: previewContent(state.source, state.preview), attempt: state.attempt, celebrateCorrect
+        previewHtml: previewContent(state.preview), attempt: state.attempt, celebrateCorrect
       });
       return;
     }
