@@ -27,22 +27,55 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('<code>−');
   });
 
-  it('renders a structured partial result instead of raw streaming JSON', async () => {
+  it('shows only the naturally growing thinking timeline while reasoning', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
       kind: 'loading', fileName: 'answer.cpp', source: 'return 0;',
       preview: { verdict: 'incorrect', summary: '返回值仍在生成' }, attempt: 1,
-      thinkingStatus: { label: '核对算法逻辑', stages: ['核对算法逻辑'], complete: false, elapsedMs: 1200, attempt: 1 }
+      thinkingStatus: {
+        label: '核对算法逻辑',
+        stages: [{ title: '核对算法逻辑', detail: '检查主要控制流和关键边界条件。' }],
+        complete: false, elapsedMs: 1200, attempt: 1
+      }
     }, 'nonce');
-    expect(html).toContain('id="structured-preview"');
-    expect(html).toContain('返回值仍在生成');
-    expect(html).toContain('错误');
-    expect(html).toContain('<ol id="thinking-stages" class="thinking-stages"><li>核对算法逻辑</li></ol>');
+    expect(html).not.toContain('id="structured-preview"');
+    expect(html).not.toContain('返回值仍在生成');
+    expect(html).toContain('<strong class="thinking-stage-title">核对算法逻辑</strong>');
+    expect(html).toContain('<p class="thinking-stage-detail">检查主要控制流和关键边界条件。</p>');
+    expect(html).toContain('.thinking-stages{max-height:none;overflow:visible');
     expect(html).toContain("document.createElement('li')");
     expect(html).not.toContain('class="caret"');
     expect(html).not.toContain('live-value');
     expect(html).not.toContain('id="conclusion"');
     expect(html).not.toContain('{&quot;verdict&quot;');
+  });
+
+  it('switches from the thinking-only timeline to the streamed conclusion', async () => {
+    const { JudgeViewProvider } = await import('../../src/webview.js');
+    const webview = {
+      options: {}, html: '', cspSource: 'vscode-webview://unit-test',
+      asWebviewUri: (uri: { toString(): string }) => uri,
+      onDidReceiveMessage: () => ({ dispose() {} }),
+      postMessage: async () => true
+    };
+    const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {});
+    provider.resolveWebviewView({ webview } as never);
+    provider.setState({
+      kind: 'loading', fileName: 'answer.cpp', source: '', preview: {}, attempt: 1,
+      thinkingStatus: {
+        label: '检查算法逻辑', stages: [{ title: '检查算法逻辑', detail: '核对主要控制流。' }],
+        complete: false, elapsedMs: 1200, attempt: 1
+      }
+    });
+    expect(webview.html).not.toContain('id="structured-preview"');
+
+    provider.setState({
+      kind: 'loading', fileName: 'answer.cpp', source: '', preview: { summary: '结论开始生成' }, attempt: 1,
+      thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 1800, attempt: 1 }
+    });
+    expect(webview.html).toContain('id="structured-preview"');
+    expect(webview.html).toContain('结论开始生成');
+    provider.dispose();
   });
 
   it('does not show an explanatory banner when thinking is disabled', async () => {
@@ -74,7 +107,14 @@ describe('diff webview markup', () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
       kind: 'result', fileName: 'answer.cpp', source: 'return 0;',
-      thinkingStatus: { label: '思考完成', stages: ['核对算法逻辑', '验证边界条件'], complete: true, elapsedMs: 21000, attempt: 1 },
+      thinkingStatus: {
+        label: '思考完成',
+        stages: [
+          { title: '核对算法逻辑', detail: '检查主要控制流。' },
+          { title: '验证边界条件', detail: '确认边界输入的行为。' }
+        ],
+        complete: true, elapsedMs: 21000, attempt: 1
+      },
       result: {
         verdict: 'correct', summary: '正确', strengths: [], issues: [],
         complexity: { time: 'O(1)', space: 'O(1)', assessment: '合理' }, suggestedSnippet: ''

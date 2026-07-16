@@ -91,18 +91,19 @@ class JudgeController implements vscode.Disposable {
     let latestProgress = { reasoning: '', content: '', preview: {}, attempt: 1 };
     const thinkingSummaryScheduler = thinkingEnabled
       ? new ThinkingSummaryScheduler(
-        (reasoning, previousSummary, signal) => requestThinkingSummary({
+        (reasoning, previousSummary, signal, onProgress) => requestThinkingSummary({
           apiKey: confirmedApiKey,
           baseUrl: config.get('apiBaseUrl', 'https://api.deepseek.com'),
           model: config.get('thinkingSummaryModel', 'deepseek-v4-flash'),
           reasoning,
           previousSummary,
           timeoutSeconds: Math.min(15, config.get('requestTimeoutSeconds', 90)),
-          signal
+          signal,
+          onProgress
         }, this.fetcher),
-        (summary, attempt) => {
+        (stage, attempt) => {
           if (id !== this.requestId || latestProgress.content.length > 0 || attempt !== latestProgress.attempt) return;
-          const thinkingStatus = thinkingTracker.applySummary(summary, attempt);
+          const thinkingStatus = thinkingTracker.applySummary(stage, attempt);
           this.view.setState({
             kind: 'loading', fileName, source: pair.cppContent, preview: latestProgress.preview, attempt,
             thinkingStatus

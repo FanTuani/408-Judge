@@ -68,7 +68,7 @@ suite('408 Judge extension', () => {
       const requestBody = JSON.parse(String(init?.body)) as { model?: string; thinking?: { type?: string } };
       if (requestBody.model === 'deepseek-v4-flash' && requestBody.thinking?.type === 'disabled') {
         return Promise.resolve(new Response(JSON.stringify({
-          choices: [{ message: { content: '{"summary":"正在检查边界条件与内存安全"}' }, finish_reason: 'stop' }]
+          choices: [{ message: { content: '{"title":"检查边界条件与内存安全","detail":"核对边界输入、数组访问和资源释放是否安全。"}' }, finish_reason: 'stop' }]
         }), { status: 200, headers: { 'content-type': 'application/json' } }));
       }
       mainCall += 1;
@@ -83,7 +83,9 @@ suite('408 Judge extension', () => {
       });
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"正在检查边界"}}]}\n\n'));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            choices: [{ delta: { reasoning_content: '正在检查边界、数组访问和内存安全。'.repeat(16) } }]
+          })}\n\n`));
           setTimeout(() => {
             controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"条件、数组越界和内存安全"}}]}\n\n'));
             setTimeout(() => {
