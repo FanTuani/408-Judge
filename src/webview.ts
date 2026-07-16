@@ -126,12 +126,19 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .thinking-stages li:not(:last-child)::after{bottom:-.15em}
     .thinking-stage-title{display:block;color:var(--vscode-foreground);font-size:14px;line-height:1.45}
     .thinking-stage-detail{margin:5px 0 0;color:var(--vscode-descriptionForeground);font-size:12px;line-height:1.55}
-    .thinking-summary-batch{animation:thinking-summary-reveal .72s cubic-bezier(.2,.7,.2,1) both}
-    @keyframes thinking-summary-reveal{0%{opacity:0;filter:blur(1.8px)}45%{opacity:.62;filter:blur(.55px)}100%{opacity:1;filter:blur(0)}}
-    @media (prefers-reduced-motion:reduce){.thinking-summary-batch{animation:none}}
+    .thinking-stage-enter .thinking-stage-title{animation:thinking-title-reveal .48s cubic-bezier(.16,1,.3,1) both}
+    .thinking-stage-enter::before{animation:thinking-dot-reveal .4s cubic-bezier(.16,1,.3,1) both}
+    .thinking-stage-connected::after{transform-origin:top;animation:thinking-line-reveal .52s cubic-bezier(.16,1,.3,1) both}
+    .thinking-summary-batch{animation:thinking-summary-reveal .58s cubic-bezier(.16,1,.3,1) .06s both}
+    @keyframes thinking-title-reveal{from{opacity:0;transform:translate3d(0,7px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+    @keyframes thinking-dot-reveal{from{opacity:0;transform:scale(.35)}to{opacity:1;transform:scale(1)}}
+    @keyframes thinking-line-reveal{from{opacity:0;transform:scaleY(0)}to{opacity:1;transform:scaleY(1)}}
+    @keyframes thinking-summary-reveal{from{opacity:0;transform:translate3d(0,5px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+    @media (prefers-reduced-motion:reduce){.thinking-stage-enter .thinking-stage-title,.thinking-stage-enter::before,.thinking-stage-connected::after,.thinking-summary-batch{animation:none}}
   </style></head><body>${body}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingDone=thinkingLabel?.dataset.complete==='true';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent='Thinking · '+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
+    const reduceThinkingMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let autoFollowThinking=true;
     let followThinkingFrame=0;
     const updateThinkingFollow=()=>{autoFollowThinking=window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-120};
@@ -139,7 +146,7 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
       if(!autoFollowThinking||followThinkingFrame)return;
       followThinkingFrame=requestAnimationFrame(()=>{
         followThinkingFrame=0;
-        window.scrollTo({top:document.documentElement.scrollHeight,behavior:'auto'});
+        window.scrollTo({top:document.documentElement.scrollHeight,behavior:reduceThinkingMotion?'auto':'smooth'});
       });
     };
     window.addEventListener('scroll',updateThinkingFollow,{passive:true});
@@ -178,7 +185,9 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
           let item=stages.children[index];
           if(item?.dataset.stageTitle!==stage.title){
             while(stages.children.length>index)stages.lastElementChild?.remove();
+            stages.lastElementChild?.classList.add('thinking-stage-connected');
             item=document.createElement('li');
+            item.className='thinking-stage-enter';
             item.dataset.stageTitle=stage.title;
             const title=document.createElement('strong');
             title.className='thinking-stage-title';
