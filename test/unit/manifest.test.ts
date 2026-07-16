@@ -14,4 +14,13 @@ describe('extension settings manifest', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
     expect(manifest.contributes.configuration.properties['deepseekJudge.thinkingSummaryModel'].default).toBe('deepseek-v4-flash');
   });
+
+  it('uses a theme-aware 24px activity bar icon', () => {
+    const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    const iconPath = manifest.contributes.viewsContainers.activitybar[0].icon;
+    const icon = readFileSync(iconPath, 'utf8');
+    expect(iconPath).toBe('media/judge.svg');
+    expect(icon).toContain('viewBox="0 0 24 24"');
+    expect(icon).toContain('stroke="currentColor"');
+  });
 });
