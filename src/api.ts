@@ -42,7 +42,8 @@ function linkedSignal(external: AbortSignal | undefined, timeoutMs: number): { s
   const controller = new AbortController();
   let timeout = false;
   const onAbort = () => controller.abort();
-  external?.addEventListener('abort', onAbort, { once: true });
+  if (external?.aborted) controller.abort();
+  else external?.addEventListener('abort', onAbort, { once: true });
   const timer = setTimeout(() => { timeout = true; controller.abort(); }, timeoutMs);
   return {
     signal: controller.signal,
@@ -130,6 +131,7 @@ async function requestOnce(request: DeepSeekRequest, fetcher: FetchLike, attempt
   const url = `${request.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const abort = linkedSignal(request.signal, request.timeoutSeconds * 1000);
   try {
+    if (abort.signal.aborted) throw new ApiError('cancelled', '本次评审已取消。');
     const response = await fetcher(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${request.apiKey}` },

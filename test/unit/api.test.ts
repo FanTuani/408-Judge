@@ -93,4 +93,14 @@ describe('DeepSeek client', () => {
     controller.abort();
     await expect(promise).rejects.toMatchObject({ code: 'cancelled' });
   });
+
+  it('does not call fetch when the request was already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetcher = vi.fn();
+
+    await expect(reviewWithDeepSeek({ ...request, signal: controller.signal }, fetcher))
+      .rejects.toMatchObject({ code: 'cancelled' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });

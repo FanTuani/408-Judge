@@ -65,7 +65,8 @@ export function normalizeThinkingStage(value: unknown): ThinkingStage | undefine
 function linkedSignal(external: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; dispose: () => void } {
   const controller = new AbortController();
   const onAbort = () => controller.abort();
-  external?.addEventListener('abort', onAbort, { once: true });
+  if (external?.aborted) controller.abort();
+  else external?.addEventListener('abort', onAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return {
     signal: controller.signal,
@@ -138,6 +139,7 @@ async function readStreamingStage(response: Response, onProgress?: (stage: Think
 export async function requestThinkingSummary(request: ThinkingSummaryRequest, fetcher: FetchLike = fetch): Promise<ThinkingStage | undefined> {
   const abort = linkedSignal(request.signal, request.timeoutSeconds * 1000);
   try {
+    if (abort.signal.aborted) return undefined;
     const response = await fetcher(`${request.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${request.apiKey}` },
@@ -214,7 +216,8 @@ export class ThinkingSummaryScheduler {
     this.staleThresholdChars = options.staleThresholdChars ?? 1_200;
     this.minimumReasoningDeltaChars = options.minimumReasoningDeltaChars ?? 240;
     this.externalSignal = options.signal;
-    this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
+    if (this.externalSignal?.aborted) this.disposed = true;
+    else this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
   }
 
   update(reasoning: string, attempt: number): void {
@@ -294,19 +297,6 @@ export class ThinkingSummaryScheduler {
   }
 }
 
-function likelySameStageTitle(previous: string, next: string): boolean {
-  if (previous === next) return true;
-  const shorter = previous.length <= next.length ? previous : next;
-  const longer = previous.length > next.length ? previous : next;
-  if (shorter.length >= 4 && longer.includes(shorter)) return true;
-  const withoutGenericVerb = (value: string) => value.replace(/^(分析|审查|检查|核对|验证|理解|评估|梳理)/, '');
-  const previousSubject = withoutGenericVerb(previous);
-  const nextSubject = withoutGenericVerb(next);
-  const shorterSubject = previousSubject.length <= nextSubject.length ? previousSubject : nextSubject;
-  const longerSubject = previousSubject.length > nextSubject.length ? previousSubject : nextSubject;
-  return shorterSubject.length >= 3 && longerSubject.includes(shorterSubject);
-}
-
 /** Owns the stable UI label and elapsed time; semantic labels come from the sidecar model. */
 export class ThinkingSummaryTracker {
   private attempt: number;
@@ -333,7 +323,7 @@ export class ThinkingSummaryTracker {
     if (!normalized) return this.status(now);
     this.label = normalized.title;
     const last = this.stages.at(-1);
-    if (last && likelySameStageTitle(last.title, normalized.title)) this.stages[this.stages.length - 1] = normalized;
+    if (last?.title === normalized.title) this.stages[this.stages.length - 1] = normalized;
     else this.stages.push(normalized);
     return this.status(now);
   }

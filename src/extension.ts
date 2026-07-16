@@ -70,12 +70,14 @@ class JudgeController implements vscode.Disposable {
       return this.fail(id, error instanceof PairingError ? error.message : '读取题目文件时发生错误。');
     }
     if (id !== this.requestId) return;
+    if (abort.signal.aborted) return this.fail(id, '本次评审已取消。');
 
     this.sourceUri = editor.document.uri;
     const fileName = path.basename(pair.cppPath);
     const apiKey = await this.apiKeys.getOrPromptForReview();
     if (!apiKey) return this.fail(id, '未设置 DeepSeek API Key，评审未发送。');
     if (id !== this.requestId) return;
+    if (abort.signal.aborted) return this.fail(id, '本次评审已取消。');
     const confirmedApiKey = apiKey;
 
     const config = vscode.workspace.getConfiguration('deepseekJudge');

@@ -77,6 +77,27 @@ describe('thinking summary', () => {
     expect(progress.at(-1)?.detail).toBe('核对数组范围和循环终止条件。');
   });
 
+  it('does not start a sidecar request or scheduler after prior cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetcher = vi.fn();
+    await expect(requestThinkingSummary({
+      apiKey: 'secret', baseUrl: 'https://example.test', model: 'deepseek-v4-flash',
+      reasoning: '分析循环边界', previousSummary: 'Thinking', timeoutSeconds: 1,
+      signal: controller.signal
+    }, fetcher)).resolves.toBeUndefined();
+    expect(fetcher).not.toHaveBeenCalled();
+
+    const summarize = vi.fn();
+    const scheduler = new ThinkingSummaryScheduler(summarize, () => {}, {
+      initialDelayMs: 0, minimumReasoningDeltaChars: 1, signal: controller.signal
+    });
+    scheduler.update('已经产生的推理', 1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(summarize).not.toHaveBeenCalled();
+    scheduler.dispose();
+  });
+
   it('keeps only one sidecar request in flight and schedules fresh reasoning afterward', async () => {
     let resolveFirst: ((value: { title: string; detail: string }) => void) | undefined;
     const summarize = vi.fn((_reasoning: string) => new Promise<{ title: string; detail: string }>(resolve => {
@@ -115,6 +136,7 @@ describe('thinking summary', () => {
     ]);
     expect(tracker.applySummary({ title: '验证返回值语义', detail: '继续核对返回值约定。' }, 1, 2_100).stages).toEqual([
       { title: '检查循环边界', detail: '继续核对终止条件。' },
+      { title: '验证返回值', detail: '确认函数结果符合目标。' },
       { title: '验证返回值语义', detail: '继续核对返回值约定。' }
     ]);
     expect(tracker.update('{', 1, 2_700)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
