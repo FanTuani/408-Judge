@@ -3,7 +3,7 @@
   "displayName": "408 Judge",
   "description": "使用 DeepSeek 在侧边栏评审当前 408 C++ 题解",
   "version": "0.11.8",
-  "publisher": "local-408",
+  "publisher": "ricequakes",
   "private": true,
   "author": {
     "name": "FanTuani"
@@ -65,6 +65,14 @@
         "command": "deepseekJudge.clearApiKey",
         "title": "408 Judge: 清除 DeepSeek API Key",
         "icon": "$(trash)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "deepseekJudge.reviewCurrent",
+        "key": "ctrl+'",
+        "mac": "cmd+'",
+        "when": "editorTextFocus && editorLangId == cpp"
       }
     ],
     "menus": {
@@ -179,6 +187,7 @@
   },
   "dependencies": {
     "@streamparser/json": "^0.0.22",
-    "canvas-confetti": "^1.9.4"
+    "canvas-confetti": "^1.9.4",
+    "jsonc-parser": "^3.3.1"
   }
 }

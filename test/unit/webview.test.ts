@@ -5,6 +5,77 @@ vi.mock('vscode', () => ({
 }));
 
 describe('diff webview markup', () => {
+  it('shows the current shortcut after review buttons and updates the hint in place', async () => {
+    const { JudgeViewProvider, renderWebview } = await import('../../src/webview.js');
+    const html = renderWebview({ kind: 'idle' }, 'nonce', false, '', '', 'high', "⌘'");
+    expect(html).toContain('<button id="review" class="review-button"><span>评审当前 C++ 作答</span><kbd class="shortcut-hint" data-shortcut-hint>⌘&#39;</kbd></button>');
+    expect(html).toContain('var(--vscode-keybindingLabel-background)');
+    expect(html).toContain("if(event.data?.type==='shortcut')");
+
+    const messages: Array<{ type?: string; shortcut?: string }> = [];
+    const webview = {
+      options: {}, html: '', cspSource: 'vscode-webview://unit-test',
+      asWebviewUri: (uri: { toString(): string }) => uri,
+      onDidReceiveMessage: () => ({ dispose() {} }),
+      postMessage: async (message: { type?: string; shortcut?: string }) => { messages.push(message); return true; }
+    };
+    const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {});
+    provider.resolveWebviewView({ webview } as never);
+    const htmlBeforeUpdate = webview.html;
+    provider.setReviewShortcut('⌘K');
+    expect(webview.html).toBe(htmlBeforeUpdate);
+    expect(messages.at(-1)).toEqual({ type: 'shortcut', shortcut: '⌘K' });
+    provider.dispose();
+  });
+
+  it('renders review history as a navigable list and detail view', async () => {
+    const { renderWebview } = await import('../../src/webview.js');
+    const entry = {
+      id: 'history-1', fileUri: 'file:///workspace/answer.cpp', fileName: 'answer.cpp', displayPath: 'src/answer.cpp',
+      reviewedAt: '2026-07-17T02:00:00.000Z', source: 'return 0;',
+      result: {
+        verdict: 'incorrect' as const, summary: '边界条件仍需修复', strengths: [],
+        issues: [{ severity: 'warning', title: '边界', description: '需修复', suggestion: '补充分支', line: 2 }],
+        complexity: { time: 'O(1)', space: 'O(1)', assessment: '合理' }, suggestedSnippet: ''
+      }
+    };
+    const listHtml = renderWebview({ kind: 'history', entries: [entry] }, 'nonce');
+    expect(listHtml).toContain('data-history-id="history-1"');
+    expect(listHtml).toContain('src/answer.cpp');
+    expect(listHtml).toContain('边界条件仍需修复');
+    expect(listHtml).toContain("vscode.postMessage({type:'historyEntry',id:el.dataset.historyId})");
+
+    const detailHtml = renderWebview({ kind: 'history-detail', entry }, 'nonce');
+    expect(detailHtml).toContain('id="history-back"');
+    expect(detailHtml).toContain('id="history-close"');
+    expect(detailHtml).toContain('<section class="live-preview final-result result-stack">');
+    expect(detailHtml).toContain('边界条件仍需修复');
+    expect(detailHtml).toContain('data-file-uri="file:///workspace/answer.cpp"');
+
+    let receiver: ((message: unknown) => void) | undefined;
+    const showHistory = vi.fn();
+    const openHistory = vi.fn();
+    const webview = {
+      options: {}, html: '', cspSource: 'vscode-webview://unit-test',
+      asWebviewUri: (uri: { toString(): string }) => uri,
+      onDidReceiveMessage: (listener: (message: unknown) => void) => { receiver = listener; return { dispose() {} }; },
+      postMessage: async () => true
+    };
+    const provider = new (await import('../../src/webview.js')).JudgeViewProvider(
+      {} as never, () => {}, () => {}, () => {}, 'high', () => {}, undefined, showHistory, openHistory
+    );
+    provider.resolveWebviewView({ webview } as never);
+    receiver?.({ type: 'history' });
+    receiver?.({ type: 'historyEntry', id: 'history-1' });
+    expect(showHistory).toHaveBeenCalledOnce();
+    expect(openHistory).toHaveBeenCalledWith('history-1');
+    provider.showHistory([entry]);
+    provider.showHistoryEntry(entry);
+    receiver?.({ type: 'historyClose' });
+    expect(provider.getState().kind).toBe('idle');
+    provider.dispose();
+  });
+
   it('uses a unified table with full-row diff classes and no per-line code blocks', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 interface TestState {
-  kind: 'idle' | 'loading' | 'result' | 'error';
+  kind: 'idle' | 'loading' | 'result' | 'error' | 'history' | 'history-detail';
   content?: string;
   preview?: { summary?: string };
   thinkingStatus?: { label: string; complete: boolean };
@@ -16,9 +16,10 @@ interface ExtensionTestApi {
   openLine(line: number): Promise<void>;
   storeApiKeyForTest(value: string): Promise<void>;
   getApiKeyForTest(): Promise<string | undefined>;
+  getHistoryForTest(): Promise<ReadonlyArray<{ fileUri: string; result: { verdict: string } }>>;
 }
 
-const extensionId = 'local-408.408-judge';
+const extensionId = 'ricequakes.408-judge';
 
 async function waitFor(predicate: () => boolean, message: string): Promise<void> {
   const deadline = Date.now() + 5_000;
@@ -115,6 +116,9 @@ suite('408 Judge extension', () => {
     const state = api.getState();
     assert.equal(state.kind, 'result');
     if (state.kind === 'result') assert.equal(state.result?.verdict, 'partially_correct');
+
+    const history = await api.getHistoryForTest();
+    assert.ok(history.some(entry => entry.fileUri === fixture.toString() && entry.result.verdict === 'partially_correct'));
 
     await api.openLine(2);
     assert.equal(vscode.window.activeTextEditor?.selection.active.line, 1);

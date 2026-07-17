@@ -4,12 +4,23 @@ import { describe, expect, it } from 'vitest';
 describe('extension settings manifest', () => {
   it('contains the public Marketplace metadata', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    expect(manifest.publisher).toBe('ricequakes');
     expect(manifest.icon).toBe('media/icon.png');
     expect(manifest.repository.url).toBe('https://github.com/FanTuani/408-Judge.git');
     expect(manifest.homepage).toBe('https://github.com/FanTuani/408-Judge#readme');
     expect(manifest.bugs.url).toBe('https://github.com/FanTuani/408-Judge/issues');
     expect(manifest.keywords).toContain('408');
     expect(manifest.license).toBe('SEE LICENSE IN LICENSE');
+  });
+
+  it('contributes the default review shortcut for each platform', () => {
+    const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    expect(manifest.contributes.keybindings).toContainEqual({
+      command: 'deepseekJudge.reviewCurrent',
+      key: "ctrl+'",
+      mac: "cmd+'",
+      when: 'editorTextFocus && editorLangId == cpp'
+    });
   });
 
   it('offers exactly three reasoning levels and defaults to high', () => {

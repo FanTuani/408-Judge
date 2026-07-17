@@ -2,6 +2,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ApiError, reviewWithDeepSeek, type FetchLike, type ThinkingLevel } from './api.js';
 import { API_KEY_SECRET, ApiKeyStore } from './apiKey.js';
+import { ReviewHistoryStore, type ReviewHistoryEntry } from './history.js';
+import { ReviewShortcutTracker } from './keybinding.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
 import { requestThinkingSummary, ThinkingSummaryScheduler, ThinkingSummaryTracker } from './thinkingSummary.js';
@@ -13,6 +15,7 @@ export interface ExtensionTestApi {
   openLine(line: number): Promise<void>;
   storeApiKeyForTest(value: string): Promise<void>;
   getApiKeyForTest(): Promise<string | undefined>;
+  getHistoryForTest(): Promise<readonly ReviewHistoryEntry[]>;
 }
 
 class JudgeController implements vscode.Disposable {
@@ -20,18 +23,31 @@ class JudgeController implements vscode.Disposable {
   private activeAbort?: AbortController;
   private sourceUri?: vscode.Uri;
   private readonly apiKeys: ApiKeyStore;
+  private readonly history: ReviewHistoryStore;
+  private readonly shortcutTracker: ReviewShortcutTracker;
+  private readonly disposables: vscode.Disposable[] = [];
   readonly view: JudgeViewProvider;
 
   constructor(private readonly context: vscode.ExtensionContext, private readonly fetcher: FetchLike = (input, init) => fetch(input, init)) {
     this.apiKeys = new ApiKeyStore(context.secrets, options => vscode.window.showInputBox(options));
+    this.history = new ReviewHistoryStore(context.globalStorageUri);
+    this.shortcutTracker = new ReviewShortcutTracker(context.globalStorageUri);
     this.view = new JudgeViewProvider(
       context.extensionUri,
       () => void vscode.commands.executeCommand('deepseekJudge.reviewCurrent'),
       () => this.cancel(),
-      line => void this.openLine(line),
+      (line, fileUri) => void this.openLine(line, fileUri),
       this.getThinkingLevel(),
-      level => this.updateThinkingLevel(level)
+      level => this.updateThinkingLevel(level),
+      this.shortcutTracker.current,
+      () => this.showHistory(),
+      id => this.openHistory(id)
     );
+    this.disposables.push(
+      this.shortcutTracker,
+      this.shortcutTracker.onDidChange(shortcut => this.view.setReviewShortcut(shortcut))
+    );
+    void this.shortcutTracker.refresh();
   }
 
   async setApiKey(): Promise<boolean> {
@@ -145,6 +161,17 @@ class JudgeController implements vscode.Disposable {
         thinkingSummaryScheduler?.dispose();
         const thinkingStatus = thinkingEnabled ? thinkingTracker.finish() : undefined;
         this.view.setState({ kind: 'result', fileName, source: pair.cppContent, result, ...(thinkingStatus ? { thinkingStatus } : {}) });
+        try {
+          await this.history.add({
+            fileUri: editor.document.uri.toString(),
+            fileName,
+            displayPath: relativePath,
+            source: pair.cppContent,
+            result
+          });
+        } catch (error) {
+          console.error('408 Judge: failed to save review history', error);
+        }
       }
     } catch (error) {
       thinkingSummaryScheduler?.dispose();
@@ -157,15 +184,28 @@ class JudgeController implements vscode.Disposable {
     }
   }
 
-  async openLine(line: number): Promise<void> {
-    if (!this.sourceUri) return;
-    const document = await vscode.workspace.openTextDocument(this.sourceUri);
+  async openLine(line: number, fileUri?: string): Promise<void> {
+    const sourceUri = fileUri ? vscode.Uri.parse(fileUri) : this.sourceUri;
+    if (!sourceUri) return;
+    const document = await vscode.workspace.openTextDocument(sourceUri);
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     const safeLine = Math.min(Math.max(0, line - 1), Math.max(0, document.lineCount - 1));
     const position = new vscode.Position(safeLine, 0);
     editor.selection = new vscode.Selection(position, position);
     editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
+
+  async showHistory(): Promise<void> {
+    this.view.showHistory(await this.history.list());
+  }
+
+  async openHistory(id: string): Promise<void> {
+    const entry = await this.history.get(id);
+    if (!entry) return;
+    this.view.showHistoryEntry(entry);
+  }
+
+  getHistoryForTest(): Promise<readonly ReviewHistoryEntry[]> { return this.history.list(); }
 
   syncThinkingLevel(): void {
     this.view.setThinkingLevel(this.getThinkingLevel());
@@ -195,7 +235,11 @@ class JudgeController implements vscode.Disposable {
     }
   }
 
-  dispose(): void { this.activeAbort?.abort(); this.view.dispose(); }
+  dispose(): void {
+    this.activeAbort?.abort();
+    this.disposables.forEach(disposable => disposable.dispose());
+    this.view.dispose();
+  }
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionTestApi {
@@ -215,7 +259,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionTestApi {
     getActiveRequestId: () => controller.getActiveRequestId(),
     openLine: line => controller.openLine(line),
     storeApiKeyForTest: async value => { await context.secrets.store(API_KEY_SECRET, value); },
-    getApiKeyForTest: async () => context.secrets.get(API_KEY_SECRET)
+    getApiKeyForTest: async () => context.secrets.get(API_KEY_SECRET),
+    getHistoryForTest: () => controller.getHistoryForTest()
   };
 }
 
