@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { normalizeJudgeResult, type JudgeResult } from './types.js';
@@ -16,12 +16,14 @@ export interface ReviewHistoryEntry {
   result: JudgeResult;
 }
 
-export function historyRelativeFilePath(rootPath: string, sourcePath: string): string {
-  const relativePath = path.posix.relative(rootPath, sourcePath);
-  const sourceRelativePath = relativePath === '..' || relativePath.startsWith('../') || path.posix.isAbsolute(relativePath)
-    ? path.posix.basename(sourcePath)
-    : relativePath;
-  return path.posix.join('.408judge', `${sourceRelativePath || path.posix.basename(sourcePath)}.json`);
+export function historyFileName(sourcePath: string): string {
+  const sourceFileName = path.posix.basename(sourcePath);
+  const hash = createHash('md5').update(sourcePath).digest('hex');
+  return `.${sourceFileName}_${hash}.json`;
+}
+
+export function isHistoryFileName(fileName: string): boolean {
+  return /^\..+\.cpp_[a-f0-9]{32}\.json$/.test(fileName);
 }
 
 interface HistoryDocument {

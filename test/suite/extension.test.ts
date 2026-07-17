@@ -121,8 +121,12 @@ suite('408 Judge extension', () => {
 
     const history = await api.getHistoryForTest();
     assert.ok(history.some(entry => entry.fileUri === fixture.toString() && entry.result.verdict === 'partially_correct'));
+    const historyDirectory = vscode.Uri.joinPath(fixture, '..', '.408judge');
+    const historyFiles = (await vscode.workspace.fs.readDirectory(historyDirectory))
+      .filter(([name, type]) => type === vscode.FileType.File && /^\.simple\.cpp_[a-f0-9]{32}\.json$/.test(name));
+    assert.equal(historyFiles.length, 1);
     const historyDocument = JSON.parse(new TextDecoder().decode(
-      await vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder.uri, '.408judge', 'simple.cpp.json'))
+      await vscode.workspace.fs.readFile(vscode.Uri.joinPath(historyDirectory, historyFiles[0]![0]))
     )) as { version?: number; entries?: unknown[] };
     assert.equal(historyDocument.version, 1);
     assert.ok(historyDocument.entries?.length);

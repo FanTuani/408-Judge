@@ -15,10 +15,14 @@ function entry(index: number, fileUri = `file:///answer-${index}.cpp`): ReviewHi
 }
 
 describe('review history retention', () => {
-  it('mirrors the cpp path under the hidden history directory', async () => {
-    const { historyRelativeFilePath } = await import('../../src/history.js');
-    expect(historyRelativeFilePath('/workspace', '/workspace/src/tree.cpp')).toBe('.408judge/src/tree.cpp.json');
-    expect(historyRelativeFilePath('/workspace', '/outside/tree.cpp')).toBe('.408judge/tree.cpp.json');
+  it('uses a CPH-style hidden file name tied to the cpp path', async () => {
+    const { historyFileName, isHistoryFileName } = await import('../../src/history.js');
+    const fileName = historyFileName('/workspace/src/tree.cpp');
+    expect(fileName).toMatch(/^\.tree\.cpp_[a-f0-9]{32}\.json$/);
+    expect(isHistoryFileName(fileName)).toBe(true);
+    expect(isHistoryFileName('tree.cpp.json')).toBe(false);
+    expect(historyFileName('/workspace/src/tree.cpp')).toBe(fileName);
+    expect(historyFileName('/another/src/tree.cpp')).not.toBe(fileName);
   });
 
   it('keeps the newest twenty reviews for each file', async () => {

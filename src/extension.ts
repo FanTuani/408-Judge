@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ApiError, reviewWithDeepSeek, type FetchLike, type ThinkingLevel } from './api.js';
 import { API_KEY_SECRET, ApiKeyStore } from './apiKey.js';
-import { historyRelativeFilePath, ReviewHistoryStore, type ReviewHistoryEntry } from './history.js';
+import { historyFileName, isHistoryFileName, ReviewHistoryStore, type ReviewHistoryEntry } from './history.js';
 import { ReviewShortcutTracker } from './keybinding.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
@@ -210,8 +210,8 @@ class JudgeController implements vscode.Disposable {
   getHistoryForTest(): Promise<readonly ReviewHistoryEntry[]> { return this.listHistory(); }
 
   private historyForSource(sourceUri: vscode.Uri): ReviewHistoryStore {
-    const workspaceRoot = vscode.workspace.getWorkspaceFolder(sourceUri)?.uri ?? vscode.Uri.joinPath(sourceUri, '..');
-    const fileUri = vscode.Uri.joinPath(workspaceRoot, ...historyRelativeFilePath(workspaceRoot.path, sourceUri.path).split('/'));
+    const sourceDirectory = vscode.Uri.joinPath(sourceUri, '..');
+    const fileUri = vscode.Uri.joinPath(sourceDirectory, '.408judge', historyFileName(sourceUri.path));
     return this.historyForFile(fileUri);
   }
 
@@ -226,16 +226,21 @@ class JudgeController implements vscode.Disposable {
   }
 
   private async listHistory(): Promise<readonly ReviewHistoryEntry[]> {
-    const workspaceRoots = vscode.workspace.workspaceFolders?.map(folder => folder.uri) ?? [];
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
     const sourceUri = vscode.window.activeTextEditor?.document.uri ?? this.sourceUri;
-    const roots = workspaceRoots.length > 0
-      ? workspaceRoots
+    const historyFiles = workspaceFolders.length > 0
+      ? (await Promise.all(workspaceFolders.map(folder => vscode.workspace.findFiles(
+        new vscode.RelativePattern(folder, '**/.408judge/*.json'),
+        '**/{.git,node_modules}/**'
+      )))).flat()
       : sourceUri
-        ? [vscode.Uri.joinPath(sourceUri, '..')]
+        ? await this.findHistoryFiles(vscode.Uri.joinPath(sourceUri, '..', '.408judge'))
         : [];
-    const historyFiles = (await Promise.all(roots.map(root => this.findHistoryFiles(vscode.Uri.joinPath(root, '.408judge'))))).flat();
-    const entries = (await Promise.all(historyFiles.map(fileUri => this.historyForFile(fileUri).list()))).flat();
-    return entries.sort((left, right) => right.reviewedAt.localeCompare(left.reviewedAt));
+    const currentHistoryFiles = historyFiles.filter(fileUri => isHistoryFileName(path.posix.basename(fileUri.path)));
+    const uniqueFiles = [...new Map(currentHistoryFiles.map(fileUri => [fileUri.toString(), fileUri])).values()];
+    return (await Promise.all(uniqueFiles.map(fileUri => this.historyForFile(fileUri).list())))
+      .flat()
+      .sort((left, right) => right.reviewedAt.localeCompare(left.reviewedAt));
   }
 
   private async findHistoryFiles(directoryUri: vscode.Uri): Promise<vscode.Uri[]> {
@@ -248,8 +253,7 @@ class JudgeController implements vscode.Disposable {
     const files: vscode.Uri[] = [];
     for (const [name, type] of children) {
       const childUri = vscode.Uri.joinPath(directoryUri, name);
-      if (type === vscode.FileType.Directory) files.push(...await this.findHistoryFiles(childUri));
-      else if (type === vscode.FileType.File && name.endsWith('.json')) files.push(childUri);
+      if (type === vscode.FileType.File && isHistoryFileName(name)) files.push(childUri);
     }
     return files;
   }
