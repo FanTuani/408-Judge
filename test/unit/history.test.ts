@@ -15,6 +15,12 @@ function entry(index: number, fileUri = `file:///answer-${index}.cpp`): ReviewHi
 }
 
 describe('review history retention', () => {
+  it('mirrors the cpp path under the hidden history directory', async () => {
+    const { historyRelativeFilePath } = await import('../../src/history.js');
+    expect(historyRelativeFilePath('/workspace', '/workspace/src/tree.cpp')).toBe('.408judge/src/tree.cpp.json');
+    expect(historyRelativeFilePath('/workspace', '/outside/tree.cpp')).toBe('.408judge/tree.cpp.json');
+  });
+
   it('keeps the newest twenty reviews for each file', async () => {
     const { addToHistory, MAX_HISTORY_PER_FILE } = await import('../../src/history.js');
     const fileUri = 'file:///same.cpp';
@@ -25,11 +31,10 @@ describe('review history retention', () => {
     expect(entries.at(-1)?.id).toBe('7');
   });
 
-  it('caps total retained history', async () => {
-    const { addToHistory, MAX_HISTORY_TOTAL } = await import('../../src/history.js');
-    const entries = Array.from({ length: MAX_HISTORY_TOTAL + 12 }, (_, index) => entry(index))
-      .reduce<ReviewHistoryEntry[]>((history, value) => addToHistory(history, value), []);
-    expect(entries).toHaveLength(MAX_HISTORY_TOTAL);
-    expect(entries[0]?.id).toBe(String(MAX_HISTORY_TOTAL + 11));
+  it('keeps each history document scoped to one cpp file', async () => {
+    const { addToHistory } = await import('../../src/history.js');
+    const original = entry(1, 'file:///first.cpp');
+    const replacement = entry(2, 'file:///second.cpp');
+    expect(addToHistory([original], replacement)).toEqual([replacement]);
   });
 });

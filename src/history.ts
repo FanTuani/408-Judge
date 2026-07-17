@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { normalizeJudgeResult, type JudgeResult } from './types.js';
 
 const HISTORY_VERSION = 1;
 export const MAX_HISTORY_PER_FILE = 20;
-export const MAX_HISTORY_TOTAL = 300;
 
 export interface ReviewHistoryEntry {
   id: string;
@@ -14,6 +14,14 @@ export interface ReviewHistoryEntry {
   reviewedAt: string;
   source: string;
   result: JudgeResult;
+}
+
+export function historyRelativeFilePath(rootPath: string, sourcePath: string): string {
+  const relativePath = path.posix.relative(rootPath, sourcePath);
+  const sourceRelativePath = relativePath === '..' || relativePath.startsWith('../') || path.posix.isAbsolute(relativePath)
+    ? path.posix.basename(sourcePath)
+    : relativePath;
+  return path.posix.join('.408judge', `${sourceRelativePath || path.posix.basename(sourcePath)}.json`);
 }
 
 interface HistoryDocument {
@@ -41,22 +49,16 @@ function normalizeEntry(value: unknown): ReviewHistoryEntry | undefined {
 }
 
 export function addToHistory(entries: readonly ReviewHistoryEntry[], entry: ReviewHistoryEntry): ReviewHistoryEntry[] {
-  let sameFileCount = 0;
-  const next = [entry, ...entries].filter(item => {
-    if (item.fileUri !== entry.fileUri) return true;
-    sameFileCount += 1;
-    return sameFileCount <= MAX_HISTORY_PER_FILE;
-  });
-  return next.slice(0, MAX_HISTORY_TOTAL);
+  return [entry, ...entries.filter(item => item.fileUri === entry.fileUri)].slice(0, MAX_HISTORY_PER_FILE);
 }
 
 export class ReviewHistoryStore {
-  private readonly fileUri: vscode.Uri;
+  private readonly directoryUri: vscode.Uri;
   private entries?: ReviewHistoryEntry[];
   private writeQueue: Promise<void> = Promise.resolve();
 
-  constructor(private readonly storageUri: vscode.Uri) {
-    this.fileUri = vscode.Uri.joinPath(storageUri, 'review-history.json');
+  constructor(private readonly fileUri: vscode.Uri) {
+    this.directoryUri = vscode.Uri.joinPath(fileUri, '..');
   }
 
   async add(input: Omit<ReviewHistoryEntry, 'id' | 'reviewedAt'>): Promise<ReviewHistoryEntry> {
@@ -94,7 +96,7 @@ export class ReviewHistoryStore {
       this.entries = rawEntries.flatMap(value => {
         const entry = normalizeEntry(value);
         return entry ? [entry] : [];
-      }).slice(0, MAX_HISTORY_TOTAL);
+      }).slice(0, MAX_HISTORY_PER_FILE);
     } catch {
       this.entries = [];
     }
@@ -103,9 +105,9 @@ export class ReviewHistoryStore {
 
   private async persist(entries: readonly ReviewHistoryEntry[]): Promise<void> {
     const document: HistoryDocument = { version: HISTORY_VERSION, entries: [...entries] };
-    const temporaryUri = vscode.Uri.joinPath(this.storageUri, 'review-history.tmp.json');
-    await vscode.workspace.fs.createDirectory(this.storageUri);
-    await vscode.workspace.fs.writeFile(temporaryUri, new TextEncoder().encode(JSON.stringify(document)));
+    const temporaryUri = vscode.Uri.joinPath(this.directoryUri, `${path.posix.basename(this.fileUri.path)}.tmp`);
+    await vscode.workspace.fs.createDirectory(this.directoryUri);
+    await vscode.workspace.fs.writeFile(temporaryUri, new TextEncoder().encode(`${JSON.stringify(document, null, 2)}\n`));
     await vscode.workspace.fs.rename(temporaryUri, this.fileUri, { overwrite: true });
   }
 }

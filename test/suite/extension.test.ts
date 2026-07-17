@@ -60,7 +60,9 @@ suite('408 Judge extension', () => {
 
   test('renders result, jumps to an issue line, and cancels the superseded request', async () => {
     await api.storeApiKeyForTest('integration-secret');
-    const fixture = vscode.Uri.file(path.resolve(__dirname, '..', '..', 'fixtures', 'correct', 'simple.cpp'));
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder, 'integration workspace should be open');
+    const fixture = vscode.Uri.joinPath(workspaceFolder.uri, 'simple.cpp');
     const document = await vscode.workspace.openTextDocument(fixture);
     await vscode.window.showTextDocument(document);
 
@@ -119,6 +121,11 @@ suite('408 Judge extension', () => {
 
     const history = await api.getHistoryForTest();
     assert.ok(history.some(entry => entry.fileUri === fixture.toString() && entry.result.verdict === 'partially_correct'));
+    const historyDocument = JSON.parse(new TextDecoder().decode(
+      await vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder.uri, '.408judge', 'simple.cpp.json'))
+    )) as { version?: number; entries?: unknown[] };
+    assert.equal(historyDocument.version, 1);
+    assert.ok(historyDocument.entries?.length);
 
     await api.openLine(2);
     assert.equal(vscode.window.activeTextEditor?.selection.active.line, 1);

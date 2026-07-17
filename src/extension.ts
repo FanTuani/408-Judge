@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ApiError, reviewWithDeepSeek, type FetchLike, type ThinkingLevel } from './api.js';
 import { API_KEY_SECRET, ApiKeyStore } from './apiKey.js';
-import { ReviewHistoryStore, type ReviewHistoryEntry } from './history.js';
+import { historyRelativeFilePath, ReviewHistoryStore, type ReviewHistoryEntry } from './history.js';
 import { ReviewShortcutTracker } from './keybinding.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
@@ -23,14 +23,14 @@ class JudgeController implements vscode.Disposable {
   private activeAbort?: AbortController;
   private sourceUri?: vscode.Uri;
   private readonly apiKeys: ApiKeyStore;
-  private readonly history: ReviewHistoryStore;
+  private readonly histories = new Map<string, ReviewHistoryStore>();
+  private visibleHistory: readonly ReviewHistoryEntry[] = [];
   private readonly shortcutTracker: ReviewShortcutTracker;
   private readonly disposables: vscode.Disposable[] = [];
   readonly view: JudgeViewProvider;
 
   constructor(private readonly context: vscode.ExtensionContext, private readonly fetcher: FetchLike = (input, init) => fetch(input, init)) {
     this.apiKeys = new ApiKeyStore(context.secrets, options => vscode.window.showInputBox(options));
-    this.history = new ReviewHistoryStore(context.globalStorageUri);
     this.shortcutTracker = new ReviewShortcutTracker(context.globalStorageUri);
     this.view = new JudgeViewProvider(
       context.extensionUri,
@@ -162,7 +162,7 @@ class JudgeController implements vscode.Disposable {
         const thinkingStatus = thinkingEnabled ? thinkingTracker.finish() : undefined;
         this.view.setState({ kind: 'result', fileName, source: pair.cppContent, result, ...(thinkingStatus ? { thinkingStatus } : {}) });
         try {
-          await this.history.add({
+          await this.historyForSource(editor.document.uri).add({
             fileUri: editor.document.uri.toString(),
             fileName,
             displayPath: relativePath,
@@ -196,16 +196,63 @@ class JudgeController implements vscode.Disposable {
   }
 
   async showHistory(): Promise<void> {
-    this.view.showHistory(await this.history.list());
+    this.visibleHistory = await this.listHistory();
+    this.view.showHistory(this.visibleHistory);
   }
 
   async openHistory(id: string): Promise<void> {
-    const entry = await this.history.get(id);
+    const entry = this.visibleHistory.find(item => item.id === id)
+      ?? (await this.listHistory()).find(item => item.id === id);
     if (!entry) return;
     this.view.showHistoryEntry(entry);
   }
 
-  getHistoryForTest(): Promise<readonly ReviewHistoryEntry[]> { return this.history.list(); }
+  getHistoryForTest(): Promise<readonly ReviewHistoryEntry[]> { return this.listHistory(); }
+
+  private historyForSource(sourceUri: vscode.Uri): ReviewHistoryStore {
+    const workspaceRoot = vscode.workspace.getWorkspaceFolder(sourceUri)?.uri ?? vscode.Uri.joinPath(sourceUri, '..');
+    const fileUri = vscode.Uri.joinPath(workspaceRoot, ...historyRelativeFilePath(workspaceRoot.path, sourceUri.path).split('/'));
+    return this.historyForFile(fileUri);
+  }
+
+  private historyForFile(fileUri: vscode.Uri): ReviewHistoryStore {
+    const key = fileUri.toString();
+    let history = this.histories.get(key);
+    if (!history) {
+      history = new ReviewHistoryStore(fileUri);
+      this.histories.set(key, history);
+    }
+    return history;
+  }
+
+  private async listHistory(): Promise<readonly ReviewHistoryEntry[]> {
+    const workspaceRoots = vscode.workspace.workspaceFolders?.map(folder => folder.uri) ?? [];
+    const sourceUri = vscode.window.activeTextEditor?.document.uri ?? this.sourceUri;
+    const roots = workspaceRoots.length > 0
+      ? workspaceRoots
+      : sourceUri
+        ? [vscode.Uri.joinPath(sourceUri, '..')]
+        : [];
+    const historyFiles = (await Promise.all(roots.map(root => this.findHistoryFiles(vscode.Uri.joinPath(root, '.408judge'))))).flat();
+    const entries = (await Promise.all(historyFiles.map(fileUri => this.historyForFile(fileUri).list()))).flat();
+    return entries.sort((left, right) => right.reviewedAt.localeCompare(left.reviewedAt));
+  }
+
+  private async findHistoryFiles(directoryUri: vscode.Uri): Promise<vscode.Uri[]> {
+    let children: [string, vscode.FileType][];
+    try {
+      children = await vscode.workspace.fs.readDirectory(directoryUri);
+    } catch {
+      return [];
+    }
+    const files: vscode.Uri[] = [];
+    for (const [name, type] of children) {
+      const childUri = vscode.Uri.joinPath(directoryUri, name);
+      if (type === vscode.FileType.Directory) files.push(...await this.findHistoryFiles(childUri));
+      else if (type === vscode.FileType.File && name.endsWith('.json')) files.push(childUri);
+    }
+    return files;
+  }
 
   syncThinkingLevel(): void {
     this.view.setThinkingLevel(this.getThinkingLevel());

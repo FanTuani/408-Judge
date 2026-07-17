@@ -10,6 +10,7 @@ out-test/**
 .vscode-test/**
 .install-test/**
 .install-user/**
+.408judge/**
 *.vsix
 tsconfig.json
 esbuild.mjs
