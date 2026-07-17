@@ -7,7 +7,7 @@ import { ReviewShortcutTracker } from './keybinding.js';
 import { pairSource, PairingError } from './pairing.js';
 import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
 import { requestThinkingSummary, ThinkingSummaryScheduler, ThinkingSummaryTracker } from './thinkingSummary.js';
-import { JudgeViewProvider, type ViewState } from './webview.js';
+import { JudgeViewProvider, type ReviewModel, type ViewState } from './webview.js';
 
 export interface ExtensionTestApi {
   getState(): ViewState;
@@ -26,6 +26,7 @@ class JudgeController implements vscode.Disposable {
   private readonly histories = new Map<string, ReviewHistoryStore>();
   private visibleHistory: readonly ReviewHistoryEntry[] = [];
   private readonly shortcutTracker: ReviewShortcutTracker;
+  private updatingReviewProfile = false;
   private readonly disposables: vscode.Disposable[] = [];
   readonly view: JudgeViewProvider;
 
@@ -38,10 +39,12 @@ class JudgeController implements vscode.Disposable {
       () => this.cancel(),
       (line, fileUri) => void this.openLine(line, fileUri),
       this.getThinkingLevel(),
-      level => this.updateThinkingLevel(level),
+      this.getReviewModel(),
+      (model, level) => this.updateReviewProfile(model, level),
       this.shortcutTracker.current,
       () => this.showHistory(),
-      id => this.openHistory(id)
+      id => this.openHistory(id),
+      () => { void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:ricequakes.408-judge'); }
     );
     this.disposables.push(
       this.shortcutTracker,
@@ -75,7 +78,7 @@ class JudgeController implements vscode.Disposable {
     this.activeAbort = abort;
 
     const editor = vscode.window.activeTextEditor;
-    if (!editor) return this.fail(id, '请先打开一道 .cpp 作答文件。');
+    if (!editor) return this.fail(id, '请先打开一道 .c 或 .cpp 作答文件。');
 
     let pair;
     try {
@@ -258,8 +261,9 @@ class JudgeController implements vscode.Disposable {
     return files;
   }
 
-  syncThinkingLevel(): void {
-    this.view.setThinkingLevel(this.getThinkingLevel());
+  syncReviewProfile(): void {
+    if (this.updatingReviewProfile) return;
+    this.view.setReviewProfile(this.getReviewModel(), this.getThinkingLevel());
   }
 
   private getThinkingLevel(): ThinkingLevel {
@@ -267,15 +271,28 @@ class JudgeController implements vscode.Disposable {
     return configured === 'disabled' || configured === 'high' || configured === 'max' ? configured : 'high';
   }
 
-  private async updateThinkingLevel(level: ThinkingLevel): Promise<void> {
+  private getReviewModel(): string {
+    return vscode.workspace.getConfiguration('deepseekJudge').get<string>('model', 'deepseek-v4-pro');
+  }
+
+  private async updateReviewProfile(model: ReviewModel, level: ThinkingLevel): Promise<void> {
     const config = vscode.workspace.getConfiguration('deepseekJudge');
-    const inspected = config.inspect<string>('thinkingLevel');
-    const target = inspected?.workspaceFolderValue !== undefined
-      ? vscode.ConfigurationTarget.WorkspaceFolder
-      : inspected?.workspaceValue !== undefined
-        ? vscode.ConfigurationTarget.Workspace
-        : vscode.ConfigurationTarget.Global;
-    await config.update('thinkingLevel', level, target);
+    const targetFor = (key: 'model' | 'thinkingLevel'): vscode.ConfigurationTarget => {
+      const inspected = config.inspect<string>(key);
+      return inspected?.workspaceFolderValue !== undefined
+        ? vscode.ConfigurationTarget.WorkspaceFolder
+        : inspected?.workspaceValue !== undefined
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global;
+    };
+    this.updatingReviewProfile = true;
+    try {
+      await config.update('model', model, targetFor('model'));
+      await config.update('thinkingLevel', level, targetFor('thinkingLevel'));
+    } finally {
+      this.updatingReviewProfile = false;
+      this.syncReviewProfile();
+    }
   }
 
   private fail(id: number, message: string): void {
@@ -299,7 +316,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionTestApi {
     controller,
     vscode.window.registerWebviewViewProvider('deepseekJudge.resultsView', controller.view, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.workspace.onDidChangeConfiguration(event => {
-      if (event.affectsConfiguration('deepseekJudge.thinkingLevel')) controller.syncThinkingLevel();
+      if (event.affectsConfiguration('deepseekJudge.model') || event.affectsConfiguration('deepseekJudge.thinkingLevel')) controller.syncReviewProfile();
     }),
     vscode.commands.registerCommand('deepseekJudge.reviewCurrent', () => controller.reviewCurrent()),
     vscode.commands.registerCommand('deepseekJudge.setApiKey', () => controller.setApiKey()),

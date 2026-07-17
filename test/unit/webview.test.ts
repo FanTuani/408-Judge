@@ -8,7 +8,21 @@ describe('diff webview markup', () => {
   it('shows the current shortcut after review buttons and updates the hint in place', async () => {
     const { JudgeViewProvider, renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({ kind: 'idle' }, 'nonce', false, '', '', 'high', "⌘'");
-    expect(html).toContain('<button id="review" class="review-button"><span>评审当前 C++ 作答</span><kbd class="shortcut-hint" data-shortcut-hint>⌘&#39;</kbd></button>');
+    expect(html).toContain('<button id="review" class="review-button"><span>评审当前 C/C++ 作答</span><kbd class="shortcut-hint" data-shortcut-hint>⌘&#39;</kbd></button>');
+    expect(html).toContain('<main id="view-content" class="view-content">');
+    expect(html).toContain('<footer class="app-footer" role="toolbar" aria-label="插件功能">');
+    expect(html).toContain('<button id="home" class="app-footer-button active" title="返回插件首页" aria-label="返回插件首页" aria-current="page">');
+    expect(html).toContain('<button id="history" class="app-footer-button" title="查看评测历史" aria-label="查看评测历史">');
+    expect(html).toContain('<button id="settings" class="app-footer-button" title="打开 408 Judge 设置" aria-label="打开 408 Judge 设置">');
+    expect(html.indexOf('id="history"')).toBeGreaterThan(html.indexOf('</main>'));
+    expect(html.indexOf('id="home"')).toBeLessThan(html.indexOf('id="history"'));
+    expect(html.indexOf('id="history"')).toBeLessThan(html.indexOf('id="settings"'));
+    expect(html.indexOf('id="settings"')).toBeLessThan(html.indexOf('id="review-profile"'));
+    expect(html).toContain('.app-footer{box-sizing:border-box;display:flex;height:40px;min-height:40px');
+    expect(html).toContain('@media (max-width:360px)');
+    expect(html).toContain('.app-footer-button-label{display:none}');
+    expect(html).toContain("vscode.postMessage({type:'home'})");
+    expect(html).toContain("vscode.postMessage({type:'settings'})");
     expect(html).toContain('var(--vscode-keybindingLabel-background)');
     expect(html).toContain("if(event.data?.type==='shortcut')");
 
@@ -44,6 +58,8 @@ describe('diff webview markup', () => {
     expect(listHtml).toContain('src/answer.cpp');
     expect(listHtml).toContain('边界条件仍需修复');
     expect(listHtml).toContain("vscode.postMessage({type:'historyEntry',id:el.dataset.historyId})");
+    expect(listHtml).toContain('class="app-footer-button active"');
+    expect(listHtml).toContain('aria-current="page"');
 
     const detailHtml = renderWebview({ kind: 'history-detail', entry }, 'nonce');
     expect(detailHtml).toContain('id="history-back"');
@@ -55,6 +71,7 @@ describe('diff webview markup', () => {
     let receiver: ((message: unknown) => void) | undefined;
     const showHistory = vi.fn();
     const openHistory = vi.fn();
+    const openSettings = vi.fn();
     const webview = {
       options: {}, html: '', cspSource: 'vscode-webview://unit-test',
       asWebviewUri: (uri: { toString(): string }) => uri,
@@ -62,13 +79,19 @@ describe('diff webview markup', () => {
       postMessage: async () => true
     };
     const provider = new (await import('../../src/webview.js')).JudgeViewProvider(
-      {} as never, () => {}, () => {}, () => {}, 'high', () => {}, undefined, showHistory, openHistory
+      {} as never, () => {}, () => {}, () => {}, 'high', 'deepseek-v4-pro', () => {}, undefined, showHistory, openHistory, openSettings
     );
     provider.resolveWebviewView({ webview } as never);
     receiver?.({ type: 'history' });
     receiver?.({ type: 'historyEntry', id: 'history-1' });
     expect(showHistory).toHaveBeenCalledOnce();
     expect(openHistory).toHaveBeenCalledWith('history-1');
+    provider.showHistory([entry]);
+    provider.showHistoryEntry(entry);
+    receiver?.({ type: 'settings' });
+    expect(openSettings).toHaveBeenCalledOnce();
+    receiver?.({ type: 'home' });
+    expect(provider.getState().kind).toBe('idle');
     provider.showHistory([entry]);
     provider.showHistoryEntry(entry);
     receiver?.({ type: 'historyClose' });
@@ -94,6 +117,10 @@ describe('diff webview markup', () => {
     expect(html).toContain('<table class="diff-table">');
     expect(html).toContain('<tr class="diff-row removed">');
     expect(html).toContain('<tr class="diff-row added">');
+    expect(html).toContain('<tr class="diff-hunk"><td colspan="2">');
+    expect(html).not.toContain('class="line-number"');
+    expect(html).not.toContain('<th>旧</th>');
+    expect(html).not.toContain('<th>新</th>');
     expect(html).not.toContain('<div class="diff-line');
     expect(html).not.toContain('<code>−');
     expect(html).toContain('<section class="live-preview final-result result-stack">');
@@ -126,11 +153,12 @@ describe('diff webview markup', () => {
     expect(html).toContain('<p class="thinking-stage-detail">检查主要控制流和关键边界条件。</p>');
     expect(html).toContain('<p class="thinking-stage-detail">继续确认异常输入的处理路径。</p>');
     expect(html).toContain('.thinking-stages{max-height:none;overflow:visible');
-    expect(html).toContain('class="thinking-toolbar thinking-pending-controls"');
-    expect(html).toContain('.thinking-pending-controls .thinking-level-select{position:absolute;inset-inline-end:0;top:0;visibility:hidden;pointer-events:none}');
+    expect(html).toContain('class="thinking-toolbar"');
+    expect(html).not.toContain('thinking-pending-controls');
+    expect(html.indexOf('id="review-profile"')).toBeGreaterThan(html.indexOf('</main>'));
     expect(html).toContain("document.createElement('li')");
-    expect(html).toContain("window.addEventListener('scroll',updateOutputFollow,{passive:true})");
-    expect(html).toContain("window.scrollTo({top:document.documentElement.scrollHeight,behavior:reduceOutputMotion?'auto':'smooth'})");
+    expect(html).toContain("viewContent?.addEventListener('scroll',updateOutputFollow,{passive:true})");
+    expect(html).toContain("viewContent.scrollTo({top:viewContent.scrollHeight,behavior:reduceOutputMotion?'auto':'smooth'})");
     expect(html).toContain('followLiveOutput()');
     expect(html).toContain('.thinking-stage-enter .thinking-stage-title{animation:thinking-title-reveal .48s cubic-bezier(.16,1,.3,1) both}');
     expect(html).toContain('.thinking-stage-enter::before{animation:thinking-dot-reveal .4s cubic-bezier(.16,1,.3,1) both}');
@@ -237,7 +265,8 @@ describe('diff webview markup', () => {
     expect(html).not.toContain('判题结论');
     expect(html).not.toContain('class="live-badge"');
     expect(html).toContain('<section class="live-preview" aria-live="polite" aria-busy="true">');
-    expect(html).toContain('class="review-actions pending-review-actions"');
+    expect(html).toContain('<button id="cancel" class="secondary">取消</button>');
+    expect(html.indexOf('id="review-profile"')).toBeGreaterThan(html.indexOf('</main>'));
   });
 
   it('shows a compact thinking summary instead of raw reasoning', async () => {
@@ -274,8 +303,8 @@ describe('diff webview markup', () => {
     expect(html).toContain('[hidden]{display:none!important}');
     expect(html).toContain('<section class="live-preview final-result result-stack">');
     expect(html).toContain('<div class="thinking-toolbar"><div class="thinking-block"><div class="stream-status thinking-complete">');
-    expect(html.indexOf('id="thinking-label"')).toBeLessThan(html.indexOf('id="thinking-level"'));
-    expect(html.indexOf('id="thinking-level"')).toBeGreaterThan(html.indexOf('</header>'));
+    expect(html.indexOf('id="thinking-label"')).toBeLessThan(html.indexOf('id="review-profile"'));
+    expect(html.indexOf('id="review-profile"')).toBeGreaterThan(html.indexOf('</main>'));
     expect(html).toContain('思考完成 · 21 秒');
     expect(html).not.toContain('id="thinking-stages"');
     expect(html).not.toContain('置信度');
@@ -316,11 +345,20 @@ describe('diff webview markup', () => {
     provider.dispose();
   });
 
-  it('places the thinking-level selector below review and persists valid changes', async () => {
+  it('offers six model and thinking combinations at the footer right and persists valid changes', async () => {
     const { JudgeViewProvider, renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({ kind: 'error', message: '网络错误' }, 'nonce', false, '', '', 'max');
-    expect(html.indexOf('id="review"')).toBeLessThan(html.indexOf('id="thinking-level"'));
-    expect(html).toContain('<option value="max" selected>思考：最大强度</option>');
+    expect(html.indexOf('id="review"')).toBeLessThan(html.indexOf('id="review-profile"'));
+    expect(html.indexOf('id="settings"')).toBeLessThan(html.indexOf('id="review-profile"'));
+    expect(html.indexOf('id="review-profile"')).toBeGreaterThan(html.indexOf('</main>'));
+    expect(html).toContain('.app-footer>.review-profile-select{height:28px;min-width:0;min-height:28px;max-width:166px;margin-inline-start:auto');
+    expect(html).toContain('<optgroup label="Flash">');
+    expect(html).toContain('<optgroup label="Pro">');
+    expect(html.match(/<option value="deepseek-v4-(?:flash|pro)\|(?:disabled|high|max)"/g)).toHaveLength(6);
+    expect(html).toContain('<option value="deepseek-v4-pro|max" selected>Pro · 最大强度</option>');
+    const customHtml = renderWebview({ kind: 'idle' }, 'nonce', false, '', '', 'high', undefined, 'custom-review-model');
+    expect(customHtml).toContain('<option value="" selected disabled>自定义模型 · 高强度</option>');
+    expect(customHtml.match(/<option value="deepseek-v4-(?:flash|pro)\|(?:disabled|high|max)"/g)).toHaveLength(6);
 
     let receiver: ((message: unknown) => void) | undefined;
     const changed = vi.fn();
@@ -330,12 +368,13 @@ describe('diff webview markup', () => {
       onDidReceiveMessage: (listener: (message: unknown) => void) => { receiver = listener; return { dispose() {} }; },
       postMessage: async () => true
     };
-    const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {}, 'high', changed);
+    const provider = new JudgeViewProvider({} as never, () => {}, () => {}, () => {}, 'high', 'deepseek-v4-pro', changed);
     provider.resolveWebviewView({ webview } as never);
-    receiver?.({ type: 'setThinkingLevel', level: 'disabled' });
-    receiver?.({ type: 'setThinkingLevel', level: 'invalid' });
+    receiver?.({ type: 'setReviewProfile', model: 'deepseek-v4-flash', level: 'disabled' });
+    receiver?.({ type: 'setReviewProfile', model: 'unsupported', level: 'high' });
+    receiver?.({ type: 'setReviewProfile', model: 'deepseek-v4-pro', level: 'invalid' });
     expect(changed).toHaveBeenCalledTimes(1);
-    expect(changed).toHaveBeenCalledWith('disabled');
+    expect(changed).toHaveBeenCalledWith('deepseek-v4-flash', 'disabled');
     provider.dispose();
   });
 });

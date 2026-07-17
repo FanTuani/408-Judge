@@ -23,7 +23,7 @@ export function historyFileName(sourcePath: string): string {
 }
 
 export function isHistoryFileName(fileName: string): boolean {
-  return /^\..+\.cpp_[a-f0-9]{32}\.json$/.test(fileName);
+  return /^\..+\.(?:c|cpp)_[a-f0-9]{32}\.json$/.test(fileName);
 }
 
 interface HistoryDocument {

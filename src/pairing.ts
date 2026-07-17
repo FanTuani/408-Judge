@@ -57,13 +57,14 @@ export async function pairSource(
   unsavedCppContent: string,
   fileSystem: PairingFileSystem
 ): Promise<SourcePair> {
-  if (path.extname(cppPath).toLowerCase() !== '.cpp') {
-    throw new PairingError('wrong_extension', '只能评审当前打开的 .cpp 文件。');
+  const extension = path.extname(cppPath).toLowerCase();
+  if (extension !== '.c' && extension !== '.cpp') {
+    throw new PairingError('wrong_extension', '只能评审当前打开的 .c 或 .cpp 文件。');
   }
   if (!hasAnswerCode(unsavedCppContent)) {
     throw new PairingError('no_answer', '当前文件只有题干注释或工程样板，没有检测到作答代码。');
   }
-  const mdPath = cppPath.slice(0, -4) + '.md';
+  const mdPath = cppPath.slice(0, -extension.length) + '.md';
   try {
     const mdContent = await fileSystem.readFile(mdPath);
     return { cppPath, mdPath, cppContent: unsavedCppContent, mdContent };

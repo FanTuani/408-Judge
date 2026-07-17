@@ -85,7 +85,7 @@ describe('thinking summary', () => {
 
     const summarize = vi.fn();
     const scheduler = new ThinkingSummaryScheduler(summarize, () => {}, {
-      initialReasoningChars: 1, subsequentReasoningDeltaChars: 1, signal: controller.signal
+      intervalMs: 10_000, signal: controller.signal
     });
     scheduler.update('已经产生的推理', 1);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -93,57 +93,64 @@ describe('thinking summary', () => {
     scheduler.dispose();
   });
 
-  it('keeps only one sidecar request in flight and schedules fresh reasoning afterward', async () => {
+  it('keeps only one request in flight and waits for the next ten-second tick afterward', async () => {
+    vi.useFakeTimers();
     let resolveFirst: ((value: { title: string; detail: string }) => void) | undefined;
     const summarize = vi.fn((_reasoning: string) => new Promise<{ title: string; detail: string }>(resolve => {
       if (!resolveFirst) resolveFirst = resolve;
       else resolve({ title: '生成第二条摘要', detail: '补充说明第二阶段的处理内容。' });
     }));
     const received: string[] = [];
-    const scheduler = new ThinkingSummaryScheduler(summarize, stage => received.push(stage.title), {
-      initialReasoningChars: 1, subsequentReasoningDeltaChars: 1
-    });
-    scheduler.update('第一段推理', 1);
-    await new Promise(resolve => setTimeout(resolve, 0));
-    expect(summarize).toHaveBeenCalledTimes(1);
-    scheduler.update('第一段推理，随后进入第二阶段', 1);
-    expect(summarize).toHaveBeenCalledTimes(1);
-    resolveFirst?.({ title: '生成第一条摘要', detail: '概括第一阶段的处理内容。' });
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await new Promise(resolve => setTimeout(resolve, 0));
-    expect(summarize).toHaveBeenCalledTimes(2);
-    expect(received).toEqual(['生成第一条摘要', '生成第二条摘要']);
-    scheduler.dispose();
+    const scheduler = new ThinkingSummaryScheduler(summarize, stage => received.push(stage.title));
+    try {
+      scheduler.update('第一段推理', 1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(summarize).toHaveBeenCalledTimes(1);
+      scheduler.update('第一段推理，随后进入第二阶段', 1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(summarize).toHaveBeenCalledTimes(1);
+      resolveFirst?.({ title: '生成第一条摘要', detail: '概括第一阶段的处理内容。' });
+      await Promise.resolve();
+      expect(received).toEqual(['生成第一条摘要']);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(summarize).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(summarize).toHaveBeenCalledTimes(2);
+      expect(received).toEqual(['生成第一条摘要', '生成第二条摘要']);
+    } finally {
+      scheduler.dispose();
+      vi.useRealTimers();
+    }
   });
 
-  it('summarizes at 150 characters, then every 500 characters, using only the latest 800', async () => {
+  it('summarizes strictly every ten seconds and uses only the latest 800 characters', async () => {
+    vi.useFakeTimers();
     const snapshots: string[] = [];
     const summarize = vi.fn(async (reasoning: string) => {
       snapshots.push(reasoning);
       return { title: '概括当前阶段', detail: '说明当前检查内容。' };
     });
     const scheduler = new ThinkingSummaryScheduler(summarize, () => {});
+    try {
+      scheduler.update('a'.repeat(1_000), 1);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(summarize).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(summarize).toHaveBeenCalledTimes(1);
 
-    scheduler.update('a'.repeat(149), 1);
-    expect(summarize).not.toHaveBeenCalled();
-    scheduler.update('a'.repeat(150), 1);
-    expect(summarize).toHaveBeenCalledTimes(1);
-    await new Promise(resolve => setTimeout(resolve, 0));
+      scheduler.update('a'.repeat(1_200), 1);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(summarize).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(summarize).toHaveBeenCalledTimes(2);
 
-    scheduler.update('a'.repeat(649), 1);
-    expect(summarize).toHaveBeenCalledTimes(1);
-    scheduler.update('a'.repeat(650), 1);
-    expect(summarize).toHaveBeenCalledTimes(2);
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    scheduler.update('a'.repeat(1_149), 1);
-    expect(summarize).toHaveBeenCalledTimes(2);
-    scheduler.update('a'.repeat(1_150), 1);
-    expect(summarize).toHaveBeenCalledTimes(3);
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(snapshots.map(snapshot => snapshot.length)).toEqual([150, 650, 800]);
-    scheduler.dispose();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(summarize).toHaveBeenCalledTimes(2);
+      expect(snapshots.map(snapshot => snapshot.length)).toEqual([800, 800]);
+    } finally {
+      scheduler.dispose();
+      vi.useRealTimers();
+    }
   });
 
   it('tracks semantic labels, completes on answer content, and resets on retry', () => {

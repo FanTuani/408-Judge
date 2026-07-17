@@ -19,13 +19,21 @@ describe('extension settings manifest', () => {
       command: 'deepseekJudge.reviewCurrent',
       key: "ctrl+'",
       mac: "cmd+'",
-      when: 'editorTextFocus && editorLangId == cpp'
+      when: 'editorTextFocus && (editorLangId == c || editorLangId == cpp)'
     });
+    expect(manifest.contributes.menus['editor/context']).toContainEqual(expect.objectContaining({
+      command: 'deepseekJudge.reviewCurrent',
+      when: 'editorLangId == c || editorLangId == cpp'
+    }));
   });
 
   it('offers exactly three reasoning levels and defaults to high', () => {
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+    const modelSetting = manifest.contributes.configuration.properties['deepseekJudge.model'];
     const setting = manifest.contributes.configuration.properties['deepseekJudge.thinkingLevel'];
+    expect(modelSetting.default).toBe('deepseek-v4-pro');
+    expect(modelSetting.description).toContain('deepseek-v4-flash');
+    expect(modelSetting.description).toContain('deepseek-v4-pro');
     expect(setting.enum).toEqual(['disabled', 'high', 'max']);
     expect(setting.enumDescriptions).toHaveLength(3);
     expect(setting.default).toBe('high');

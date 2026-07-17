@@ -3,6 +3,7 @@ import { hasAnswerCode, pairSource } from '../../src/pairing.js';
 
 describe('source pairing', () => {
   it.each([
+    ['/repo/1.c', '/repo/1.md'],
     ['/repo/1.cpp', '/repo/1.md'],
     ['/repo/tree_exam_2024.cpp', '/repo/tree_exam_2024.md']
   ])('pairs %s with its exact same-stem markdown', async (cppPath, expectedMd) => {
@@ -20,7 +21,7 @@ describe('source pairing', () => {
   });
 
   it.each([
-    ['wrong extension', '/repo/a.c', 'int main(){}', 'wrong_extension'],
+    ['wrong extension', '/repo/a.cc', 'int main(){}', 'wrong_extension'],
     ['comments only', '/repo/a.cpp', '// int fake() {}\n/* return 1; */\n#include <x>', 'no_answer']
   ])('rejects %s', async (_name, file, source, code) => {
     await expect(pairSource(file, source, { readFile: async () => 'ref' }))

@@ -49,6 +49,7 @@ suite('408 Judge extension', () => {
     }
     const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf8'));
     assert.ok(packageJson.contributes.menus['editor/context'].some((item: { command: string }) => item.command === 'deepseekJudge.reviewCurrent'));
+    assert.equal(packageJson.contributes.menus['editor/context'][0].when, 'editorLangId == c || editorLangId == cpp');
   });
 
   test('stores and clears the API key using SecretStorage', async () => {
@@ -110,7 +111,7 @@ suite('408 Judge extension', () => {
     await waitFor(() => mainCall === 1, 'first network request did not start');
     const firstId = api.getActiveRequestId();
     const second = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
-    await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === '检查边界条件与内存安全', 'thinking summary was not updated');
+    await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === 'Thinking', 'thinking status was not rendered');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().preview?.summary === '整体', 'structured conclusion was not rendered incrementally');
     await Promise.all([first, second]);
 
@@ -133,5 +134,31 @@ suite('408 Judge extension', () => {
 
     await api.openLine(2);
     assert.equal(vscode.window.activeTextEditor?.selection.active.line, 1);
+  });
+
+  test('reviews a C source file and saves its history', async () => {
+    await api.storeApiKeyForTest('integration-secret');
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder, 'integration workspace should be open');
+    const fixture = vscode.Uri.joinPath(workspaceFolder.uri, 'simple-c.c');
+    await vscode.workspace.fs.writeFile(fixture, new TextEncoder().encode('// 求两个整数的较大值。\nint maximum(int a, int b) { return a > b ? a : b; }\n'));
+    const document = await vscode.workspace.openTextDocument(fixture);
+    await vscode.window.showTextDocument(document);
+
+    globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        verdict: 'correct', summary: 'C 作答正确。', strengths: ['比较逻辑正确'], issues: [],
+        complexity: { time: 'O(1)', space: 'O(1)', assessment: '符合要求' }, suggestedSnippet: ''
+      }) }, finish_reason: 'stop' }]
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))) as typeof fetch;
+
+    await vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
+    await waitFor(() => api.getState().kind === 'result', 'C source review did not complete');
+    const history = await api.getHistoryForTest();
+    assert.ok(history.some(entry => entry.fileUri === fixture.toString() && entry.result.verdict === 'correct'));
+    const historyDirectory = vscode.Uri.joinPath(fixture, '..', '.408judge');
+    const historyFiles = (await vscode.workspace.fs.readDirectory(historyDirectory))
+      .filter(([name, type]) => type === vscode.FileType.File && /^\.simple-c\.c_[a-f0-9]{32}\.json$/.test(name));
+    assert.equal(historyFiles.length, 1);
   });
 });

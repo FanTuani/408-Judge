@@ -25,6 +25,13 @@ describe('review history retention', () => {
     expect(historyFileName('/another/src/tree.cpp')).not.toBe(fileName);
   });
 
+  it('recognizes history files for both C and C++ sources', async () => {
+    const { historyFileName, isHistoryFileName } = await import('../../src/history.js');
+    const cFileName = historyFileName('/workspace/src/tree.c');
+    expect(cFileName).toMatch(/^\.tree\.c_[a-f0-9]{32}\.json$/);
+    expect(isHistoryFileName(cFileName)).toBe(true);
+  });
+
   it('keeps the newest twenty reviews for each file', async () => {
     const { addToHistory, MAX_HISTORY_PER_FILE } = await import('../../src/history.js');
     const fileUri = 'file:///same.cpp';

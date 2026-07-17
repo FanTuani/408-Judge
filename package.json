@@ -1,7 +1,7 @@
 {
   "name": "408-judge",
   "displayName": "408 Judge",
-  "description": "使用 DeepSeek 在侧边栏评审当前 408 C++ 题解",
+  "description": "使用 DeepSeek 在侧边栏评审当前 408 C/C++ 题解",
   "version": "0.11.8",
   "publisher": "ricequakes",
   "private": true,
@@ -53,7 +53,7 @@
     "commands": [
       {
         "command": "deepseekJudge.reviewCurrent",
-        "title": "408 Judge: 评审当前 C++ 作答",
+        "title": "408 Judge: 评审当前 C/C++ 作答",
         "icon": "$(checklist)"
       },
       {
@@ -72,14 +72,14 @@
         "command": "deepseekJudge.reviewCurrent",
         "key": "ctrl+'",
         "mac": "cmd+'",
-        "when": "editorTextFocus && editorLangId == cpp"
+        "when": "editorTextFocus && (editorLangId == c || editorLangId == cpp)"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "deepseekJudge.reviewCurrent",
-          "when": "editorLangId == cpp",
+          "when": "editorLangId == c || editorLangId == cpp",
           "group": "navigation@20"
         }
       ],
@@ -125,7 +125,7 @@
         "deepseekJudge.model": {
           "type": "string",
           "default": "deepseek-v4-pro",
-          "description": "用于判题的 DeepSeek 模型。"
+          "description": "用于判题的 DeepSeek 模型；侧边栏内置 deepseek-v4-flash 和 deepseek-v4-pro 快速选择。"
         },
         "deepseekJudge.thinkingLevel": {
           "type": "string",
@@ -140,7 +140,7 @@
             "最大强度：启用官方 max 思考强度。"
           ],
           "default": "high",
-          "description": "DeepSeek 官方思考模式等级：关闭、高强度或最大强度。"
+          "description": "DeepSeek 官方思考模式等级：关闭、高强度或最大强度；可在侧边栏与模型一起快速切换。"
         },
         "deepseekJudge.thinkingSummaryModel": {
           "type": "string",

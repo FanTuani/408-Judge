@@ -178,21 +178,17 @@ export async function requestThinkingSummary(request: ThinkingSummaryRequest, fe
 }
 
 interface ThinkingSummarySchedulerOptions {
-  initialReasoningChars?: number;
-  subsequentReasoningDeltaChars?: number;
+  intervalMs?: number;
   maxReasoningChars?: number;
-  staleThresholdChars?: number;
   signal?: AbortSignal;
 }
 
 type Summarize = (reasoning: string, previousSummary: string, signal: AbortSignal) => Promise<ThinkingStage | undefined>;
 
-/** Batches sidecar summaries by reasoning length, keeps one request in flight, and discards stale results. */
+/** Requests at fixed time intervals, keeps one request in flight, and never triggers early from stream volume. */
 export class ThinkingSummaryScheduler {
-  private readonly initialReasoningChars: number;
-  private readonly subsequentReasoningDeltaChars: number;
+  private readonly intervalMs: number;
   private readonly maxReasoningChars: number;
-  private readonly staleThresholdChars: number;
   private readonly externalSignal?: AbortSignal;
   private readonly onExternalAbort = () => this.dispose();
   private attempt = 1;
@@ -201,6 +197,7 @@ export class ThinkingSummaryScheduler {
   private previousSummary = 'Thinking';
   private lastRequestedLength = 0;
   private activeAbort?: AbortController;
+  private timer?: ReturnType<typeof setInterval>;
   private disposed = false;
 
   constructor(
@@ -208,20 +205,20 @@ export class ThinkingSummaryScheduler {
     private readonly onSummary: (stage: ThinkingStage, attempt: number) => void,
     options: ThinkingSummarySchedulerOptions = {}
   ) {
-    this.initialReasoningChars = options.initialReasoningChars ?? 150;
-    this.subsequentReasoningDeltaChars = options.subsequentReasoningDeltaChars ?? 500;
+    this.intervalMs = options.intervalMs ?? 10_000;
     this.maxReasoningChars = options.maxReasoningChars ?? 800;
-    this.staleThresholdChars = options.staleThresholdChars ?? 1_200;
     this.externalSignal = options.signal;
     if (this.externalSignal?.aborted) this.disposed = true;
-    else this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
+    else {
+      this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
+      this.startTimer();
+    }
   }
 
   update(reasoning: string, attempt: number): void {
     if (this.disposed) return;
     if (attempt !== this.attempt) this.reset(attempt);
     this.reasoning = reasoning;
-    if (reasoning.trim() && this.hasEnoughNewReasoning()) this.schedule();
   }
 
   dispose(): void {
@@ -230,6 +227,8 @@ export class ThinkingSummaryScheduler {
     this.generation += 1;
     this.activeAbort?.abort();
     this.activeAbort = undefined;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
     this.externalSignal?.removeEventListener('abort', this.onExternalAbort);
   }
 
@@ -241,18 +240,16 @@ export class ThinkingSummaryScheduler {
     this.reasoning = '';
     this.previousSummary = 'Thinking';
     this.lastRequestedLength = 0;
+    if (this.timer) clearInterval(this.timer);
+    this.startTimer();
   }
 
-  private schedule(): void {
-    if (this.activeAbort || this.disposed) return;
-    void this.run();
-  }
-
-  private hasEnoughNewReasoning(): boolean {
-    const requiredChars = this.lastRequestedLength === 0
-      ? this.initialReasoningChars
-      : this.subsequentReasoningDeltaChars;
-    return this.reasoning.length - this.lastRequestedLength >= requiredChars;
+  private startTimer(): void {
+    this.timer = setInterval(() => {
+      if (!this.activeAbort && this.reasoning.trim() && this.reasoning.length > this.lastRequestedLength) {
+        void this.run();
+      }
+    }, this.intervalMs);
   }
 
   private async run(): Promise<void> {
@@ -261,20 +258,18 @@ export class ThinkingSummaryScheduler {
     const attempt = this.attempt;
     const snapshotLength = this.reasoning.length;
     const snapshot = this.reasoning.slice(-this.maxReasoningChars);
+    this.lastRequestedLength = snapshotLength;
     const controller = new AbortController();
     this.activeAbort = controller;
     try {
       const summary = await this.summarize(snapshot, this.previousSummary, controller.signal);
-      this.lastRequestedLength = snapshotLength;
       const isCurrent = !this.disposed && generation === this.generation && attempt === this.attempt;
-      const isFresh = this.reasoning.length - snapshotLength <= this.staleThresholdChars;
-      if (summary && isCurrent && isFresh) {
+      if (summary && isCurrent) {
         this.previousSummary = summary.title;
         this.onSummary(summary, attempt);
       }
     } finally {
       if (this.activeAbort === controller) this.activeAbort = undefined;
-      if (!this.disposed && generation === this.generation && this.hasEnoughNewReasoning()) this.schedule();
     }
   }
 }
