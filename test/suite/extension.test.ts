@@ -87,20 +87,22 @@ suite('408 Judge extension', () => {
       });
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            choices: [{ delta: { reasoning_content: '正在检查边界、数组访问和内存安全。'.repeat(16) } }]
-          })}\n\n`));
           setTimeout(() => {
-            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"条件、数组越界和内存安全"}}]}\n\n'));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              choices: [{ delta: { reasoning_content: '正在检查边界、数组访问和内存安全。'.repeat(16) } }]
+            })}\n\n`));
             setTimeout(() => {
-              const split = resultJson.indexOf('整体可行') + 2;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(0, split) }, finish_reason: null }] })}\n\n`));
+              controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"条件、数组越界和内存安全"}}]}\n\n'));
               setTimeout(() => {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(split) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
-                controller.close();
-              }, 100);
-            }, 1_250);
-          }, 850);
+                const split = resultJson.indexOf('整体可行') + 2;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(0, split) }, finish_reason: null }] })}\n\n`));
+                setTimeout(() => {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: resultJson.slice(split) }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`));
+                  controller.close();
+                }, 100);
+              }, 1_250);
+            }, 850);
+          }, 200);
         }
       });
       return Promise.resolve(new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
@@ -111,6 +113,7 @@ suite('408 Judge extension', () => {
     await waitFor(() => mainCall === 1, 'first network request did not start');
     const firstId = api.getActiveRequestId();
     const second = vscode.commands.executeCommand('deepseekJudge.reviewCurrent');
+    await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === 'Pending', 'pending status was not rendered before the first response');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().thinkingStatus?.label === 'Thinking', 'thinking status was not rendered');
     await waitFor(() => api.getState().kind === 'loading' && api.getState().preview?.summary === '整体', 'structured conclusion was not rendered incrementally');
     await Promise.all([first, second]);

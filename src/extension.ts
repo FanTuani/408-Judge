@@ -106,9 +106,9 @@ class JudgeController implements vscode.Disposable {
       : path.basename(pair.cppPath);
     const thinkingLevel = this.getThinkingLevel();
     const thinkingEnabled = thinkingLevel !== 'disabled';
-    const thinkingStartedAt = Date.now();
-    const thinkingTracker = new ThinkingSummaryTracker(thinkingStartedAt);
-    const initialThinkingStatus = thinkingEnabled ? thinkingTracker.update('', 1, thinkingStartedAt) : undefined;
+    const requestStartedAt = Date.now();
+    const thinkingTracker = new ThinkingSummaryTracker(requestStartedAt);
+    const initialThinkingStatus = thinkingEnabled ? thinkingTracker.update('', '', 1, requestStartedAt) : undefined;
     let latestProgress = { reasoning: '', content: '', preview: {}, attempt: 1 };
     const thinkingSummaryScheduler = thinkingEnabled
       ? new ThinkingSummaryScheduler(
@@ -151,7 +151,7 @@ class JudgeController implements vscode.Disposable {
             if (progress.content.length > 0) thinkingSummaryScheduler?.dispose();
             else thinkingSummaryScheduler?.update(progress.reasoning, progress.attempt);
             const thinkingStatus = thinkingEnabled
-              ? thinkingTracker.update(progress.content, progress.attempt)
+              ? thinkingTracker.update(progress.reasoning, progress.content, progress.attempt)
               : undefined;
             this.view.setState({
               kind: 'loading', fileName, source: pair.cppContent, preview: progress.preview, attempt: progress.attempt,

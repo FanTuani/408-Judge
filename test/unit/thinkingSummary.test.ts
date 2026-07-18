@@ -132,6 +132,7 @@ describe('thinking summary', () => {
     });
     const scheduler = new ThinkingSummaryScheduler(summarize, () => {});
     try {
+      await vi.advanceTimersByTimeAsync(9_000);
       scheduler.update('a'.repeat(1_000), 1);
       await vi.advanceTimersByTimeAsync(9_999);
       expect(summarize).not.toHaveBeenCalled();
@@ -153,33 +154,35 @@ describe('thinking summary', () => {
     }
   });
 
-  it('tracks semantic labels, completes on answer content, and resets on retry', () => {
+  it('tracks pending separately, starts thinking on first information, and resets on retry', () => {
     const tracker = new ThinkingSummaryTracker(1_000);
-    expect(tracker.update('', 1, 1_500)).toMatchObject({ label: 'Thinking', stages: [] });
-    expect(tracker.applySummary({ title: '检查循环边界', detail: '核对循环范围。' }, 1, 1_800)).toMatchObject({
+    expect(tracker.update('', '', 1, 1_500)).toMatchObject({ label: 'Pending', phase: 'pending', elapsedMs: 500, stages: [] });
+    expect(tracker.applySummary({ title: '不应提前出现', detail: '尚未收到 API 信息。' }, 1, 1_800).stages).toEqual([]);
+    expect(tracker.update('开始检查', '', 1, 2_700)).toMatchObject({ label: 'Thinking', phase: 'thinking', elapsedMs: 0 });
+    expect(tracker.applySummary({ title: '检查循环边界', detail: '核对循环范围。' }, 1, 2_800)).toMatchObject({
       label: '检查循环边界', stages: [{ title: '检查循环边界', details: ['核对循环范围。'] }]
     });
-    expect(tracker.applySummary({ title: '检查循环边界', detail: '继续核对终止条件。' }, 1, 1_900).stages).toEqual([
+    expect(tracker.applySummary({ title: '检查循环边界', detail: '继续核对终止条件。' }, 1, 2_900).stages).toEqual([
       { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。'] }
     ]);
-    expect(tracker.applySummary({ title: '验证返回值', detail: '确认函数结果符合目标。' }, 1, 2_000).stages).toEqual([
+    expect(tracker.applySummary({ title: '验证返回值', detail: '确认函数结果符合目标。' }, 1, 3_000).stages).toEqual([
       { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。'] },
       { title: '验证返回值', details: ['确认函数结果符合目标。'] }
     ]);
-    expect(tracker.applySummary({ title: '验证返回值语义', detail: '继续核对返回值约定。' }, 1, 2_100).stages).toEqual([
+    expect(tracker.applySummary({ title: '验证返回值语义', detail: '继续核对返回值约定。' }, 1, 3_100).stages).toEqual([
       { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。'] },
       { title: '验证返回值', details: ['确认函数结果符合目标。'] },
       { title: '验证返回值语义', details: ['继续核对返回值约定。'] }
     ]);
-    expect(tracker.applySummary({ title: '检查循环边界', detail: '复核极端输入下的循环范围。' }, 1, 2_200).stages).toEqual([
+    expect(tracker.applySummary({ title: '检查循环边界', detail: '复核极端输入下的循环范围。' }, 1, 3_200).stages).toEqual([
       { title: '检查循环边界', details: ['核对循环范围。', '继续核对终止条件。', '复核极端输入下的循环范围。'] },
       { title: '验证返回值', details: ['确认函数结果符合目标。'] },
       { title: '验证返回值语义', details: ['继续核对返回值约定。'] }
     ]);
-    expect(tracker.applySummary({ title: '检查循环边界', detail: '复核极端输入下的循环范围。' }, 1, 2_300).stages[0].details).toHaveLength(3);
-    expect(tracker.update('{', 1, 2_700)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
-    expect(tracker.update('{"verdict"', 1, 8_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
-    expect(tracker.finish(12_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 1_700 });
-    expect(tracker.update('', 2, 3_000)).toMatchObject({ label: 'Thinking', stages: [], complete: false, elapsedMs: 0, attempt: 2 });
+    expect(tracker.applySummary({ title: '检查循环边界', detail: '复核极端输入下的循环范围。' }, 1, 3_300).stages[0].details).toHaveLength(3);
+    expect(tracker.update('开始检查', '{', 1, 4_700)).toMatchObject({ label: '思考完成', phase: 'complete', complete: true, elapsedMs: 2_000 });
+    expect(tracker.update('开始检查', '{"verdict"', 1, 8_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 2_000 });
+    expect(tracker.finish(12_000)).toMatchObject({ label: '思考完成', complete: true, elapsedMs: 2_000 });
+    expect(tracker.update('', '', 2, 13_000)).toMatchObject({ label: 'Pending', phase: 'pending', stages: [], complete: false, elapsedMs: 0, attempt: 2 });
   });
 });

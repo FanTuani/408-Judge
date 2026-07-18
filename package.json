@@ -2,7 +2,7 @@
   "name": "408-judge",
   "displayName": "408 Judge",
   "description": "使用 DeepSeek 在侧边栏评审当前 408 C/C++ 题解",
-  "version": "0.11.8",
+  "version": "0.11.10",
   "publisher": "ricequakes",
   "private": true,
   "author": {

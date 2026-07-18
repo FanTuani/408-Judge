@@ -8,6 +8,8 @@ describe('diff webview markup', () => {
   it('shows the current shortcut after review buttons and updates the hint in place', async () => {
     const { JudgeViewProvider, renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({ kind: 'idle' }, 'nonce', false, '', '', 'high', "⌘'");
+    expect(html).toContain('打开一道 .c 或 .cpp 作答，然后点击开始评审。');
+    expect(html).not.toContain('然后从编辑器右键菜单开始评审。');
     expect(html).toContain('<button id="review" class="review-button"><span>评审当前 C/C++ 作答</span><kbd class="shortcut-hint" data-shortcut-hint>⌘&#39;</kbd></button>');
     expect(html).toContain('<main id="view-content" class="view-content">');
     expect(html).toContain('<footer class="app-footer" role="toolbar" aria-label="插件功能">');
@@ -54,16 +56,27 @@ describe('diff webview markup', () => {
       }
     };
     const listHtml = renderWebview({ kind: 'history', entries: [entry] }, 'nonce');
+    expect(listHtml).toContain('<header><h1>评测历史</h1></header>');
+    expect(listHtml).not.toContain('<span class="eyebrow">评测历史</span>');
+    expect(listHtml).not.toContain('id="history-close"');
     expect(listHtml).toContain('data-history-id="history-1"');
     expect(listHtml).toContain('src/answer.cpp');
     expect(listHtml).toContain('边界条件仍需修复');
     expect(listHtml).toContain("vscode.postMessage({type:'historyEntry',id:el.dataset.historyId})");
     expect(listHtml).toContain('class="app-footer-button active"');
     expect(listHtml).toContain('aria-current="page"');
+    expect(listHtml).toContain('.history-item-top>strong{min-width:0;flex:1;overflow-wrap:anywhere}');
+    expect(listHtml).toContain('.history-item .verdict{flex:0 0 auto;');
+    expect(listHtml).toContain('white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb');
 
     const detailHtml = renderWebview({ kind: 'history-detail', entry }, 'nonce');
-    expect(detailHtml).toContain('id="history-back"');
-    expect(detailHtml).toContain('id="history-close"');
+    expect(detailHtml).toContain('<div class="history-detail-heading">');
+    expect(detailHtml).toContain('<button id="history-back" class="secondary">返回</button>');
+    expect(detailHtml).not.toContain('id="history-close"');
+    expect(detailHtml).not.toContain('>全部记录</button>');
+    expect(detailHtml).toContain('.history-detail-heading{min-width:0;flex:1}');
+    expect(detailHtml).toContain('.history-detail-actions{display:flex;flex:0 0 auto;');
+    expect(detailHtml).toContain('.history-detail-actions button{white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb}');
     expect(detailHtml).toContain('<section class="live-preview final-result result-stack">');
     expect(detailHtml).toContain('边界条件仍需修复');
     expect(detailHtml).toContain('data-file-uri="file:///workspace/answer.cpp"');
@@ -88,6 +101,8 @@ describe('diff webview markup', () => {
     expect(openHistory).toHaveBeenCalledWith('history-1');
     provider.showHistory([entry]);
     provider.showHistoryEntry(entry);
+    receiver?.({ type: 'historyBack' });
+    expect(showHistory).toHaveBeenCalledTimes(2);
     receiver?.({ type: 'settings' });
     expect(openSettings).toHaveBeenCalledOnce();
     receiver?.({ type: 'home' });
@@ -144,7 +159,7 @@ describe('diff webview markup', () => {
       thinkingStatus: {
         label: '核对算法逻辑',
         stages: [{ title: '核对算法逻辑', details: ['检查主要控制流和关键边界条件。', '继续确认异常输入的处理路径。'] }],
-        complete: false, elapsedMs: 1200, attempt: 1
+        phase: 'thinking', complete: false, elapsedMs: 1200, attempt: 1
       }
     }, 'nonce');
     expect(html).not.toContain('id="structured-preview"');
@@ -160,6 +175,8 @@ describe('diff webview markup', () => {
     expect(html).toContain("viewContent?.addEventListener('scroll',updateOutputFollow,{passive:true})");
     expect(html).toContain("viewContent.scrollTo({top:viewContent.scrollHeight,behavior:reduceOutputMotion?'auto':'smooth'})");
     expect(html).toContain('followLiveOutput()');
+    expect(html).toContain('if(finalOutput)cancelLiveOutputFollow()');
+    expect(html).toContain('if(!finalOutput)followLiveOutput()');
     expect(html).toContain('.thinking-stage-enter .thinking-stage-title{animation:thinking-title-reveal .48s cubic-bezier(.16,1,.3,1) both}');
     expect(html).toContain('.thinking-stage-enter::before{animation:thinking-dot-reveal .4s cubic-bezier(.16,1,.3,1) both}');
     expect(html).toContain('.thinking-stage-connected::after{transform-origin:top;animation:thinking-line-reveal .52s cubic-bezier(.16,1,.3,1) both}');
@@ -179,7 +196,7 @@ describe('diff webview markup', () => {
 
   it('publishes only completed result blocks and finalizes without rerendering the page', async () => {
     const { JudgeViewProvider } = await import('../../src/webview.js');
-    const messages: Array<{ final?: boolean; previewHtml?: string; headerActionsHtml?: string }> = [];
+    const messages: Array<{ final?: boolean; previewHtml?: string; headerActionsHtml?: string; thinkingPhase?: string; thinkingText?: string }> = [];
     const webview = {
       options: {}, html: '', cspSource: 'vscode-webview://unit-test',
       asWebviewUri: (uri: { toString(): string }) => uri,
@@ -190,16 +207,25 @@ describe('diff webview markup', () => {
     provider.resolveWebviewView({ webview } as never);
     provider.setState({
       kind: 'loading', fileName: 'answer.cpp', source: '', preview: {}, attempt: 1,
+      thinkingStatus: { label: 'Pending', stages: [], phase: 'pending', complete: false, elapsedMs: 800, attempt: 1 }
+    });
+    expect(webview.html).toContain('Pending · 0 秒');
+    const pendingHtml = webview.html;
+
+    provider.setState({
+      kind: 'loading', fileName: 'answer.cpp', source: '', preview: {}, attempt: 1,
       thinkingStatus: {
         label: '检查算法逻辑', stages: [{ title: '检查算法逻辑', details: ['核对主要控制流。'] }],
-        complete: false, elapsedMs: 1200, attempt: 1
+        phase: 'thinking', complete: false, elapsedMs: 1200, attempt: 1
       }
     });
+    expect(webview.html).toBe(pendingHtml);
+    expect(messages.at(-1)).toMatchObject({ thinkingPhase: 'thinking', thinkingText: 'Thinking · 1 秒' });
     expect(webview.html).not.toContain('id="structured-preview"');
 
     provider.setState({
       kind: 'loading', fileName: 'answer.cpp', source: '', preview: { summary: '结论开始生成' }, attempt: 1,
-      thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 1800, attempt: 1 }
+      thinkingStatus: { label: '思考完成', stages: [], phase: 'complete', complete: true, elapsedMs: 1800, attempt: 1 }
     });
     expect(webview.html).toContain('id="structured-preview"');
     expect(webview.html).not.toContain('结论开始生成');
@@ -208,7 +234,7 @@ describe('diff webview markup', () => {
     provider.setState({
       kind: 'loading', fileName: 'answer.cpp', source: '',
       preview: { verdict: 'correct', summary: '结论已生成', strengths: [] }, attempt: 1,
-      thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 1900, attempt: 1 }
+      thinkingStatus: { label: '思考完成', stages: [], phase: 'complete', complete: true, elapsedMs: 1900, attempt: 1 }
     });
     expect(messages.at(-1)?.previewHtml).toContain('data-result-block="overview"');
     expect(messages.at(-1)?.previewHtml).not.toContain('data-result-block="strengths"');
@@ -216,7 +242,7 @@ describe('diff webview markup', () => {
     const htmlBeforeFinal = webview.html;
     provider.setState({
       kind: 'result', fileName: 'answer.cpp', source: '',
-      thinkingStatus: { label: '思考完成', stages: [], complete: true, elapsedMs: 2000, attempt: 1 },
+      thinkingStatus: { label: '思考完成', stages: [], phase: 'complete', complete: true, elapsedMs: 2000, attempt: 1 },
       result: {
         verdict: 'correct', summary: '结论已生成', strengths: [], issues: [],
         complexity: { time: 'O(1)', space: 'O(1)', assessment: '合理' }, suggestedSnippet: ''
@@ -269,16 +295,17 @@ describe('diff webview markup', () => {
     expect(html.indexOf('id="review-profile"')).toBeGreaterThan(html.indexOf('</main>'));
   });
 
-  it('shows a compact thinking summary instead of raw reasoning', async () => {
+  it('shows pending before the first API information and updates the phase timer in place', async () => {
     const { renderWebview } = await import('../../src/webview.js');
     const html = renderWebview({
       kind: 'loading', fileName: 'answer.cpp', source: 'return 0;', preview: {}, attempt: 1,
-      thinkingStatus: { label: 'Thinking', stages: [], complete: false, elapsedMs: 0, attempt: 1 }
+      thinkingStatus: { label: 'Pending', stages: [], phase: 'pending', complete: false, elapsedMs: 0, attempt: 1 }
     }, 'nonce');
-    expect(html).toContain('data-complete="false">Thinking · 0 秒');
+    expect(html).toContain('data-phase="pending" data-complete="false">Pending · 0 秒');
     expect(html).not.toContain('思考过程');
     expect(html).not.toContain('id="reasoning"');
     expect(html).toContain('Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)');
+    expect(html).toContain("thinkingPhase==='pending'?'Pending · ':'Thinking · '");
     expect(html).toContain('if(event.data.thinkingComplete)stages?.remove()');
   });
 
@@ -292,7 +319,7 @@ describe('diff webview markup', () => {
           { title: '核对算法逻辑', details: ['检查主要控制流。'] },
           { title: '验证边界条件', details: ['确认边界输入的行为。'] }
         ],
-        complete: true, elapsedMs: 21000, attempt: 1
+        phase: 'complete', complete: true, elapsedMs: 21000, attempt: 1
       },
       result: {
         verdict: 'correct', summary: '正确', strengths: [], issues: [],

@@ -13,6 +13,7 @@ export interface ThinkingTimelineStage {
 export interface ThinkingStatus {
   label: string;
   stages: ThinkingTimelineStage[];
+  phase: 'pending' | 'thinking' | 'complete';
   complete: boolean;
   elapsedMs: number;
   attempt: number;
@@ -209,16 +210,14 @@ export class ThinkingSummaryScheduler {
     this.maxReasoningChars = options.maxReasoningChars ?? 800;
     this.externalSignal = options.signal;
     if (this.externalSignal?.aborted) this.disposed = true;
-    else {
-      this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
-      this.startTimer();
-    }
+    else this.externalSignal?.addEventListener('abort', this.onExternalAbort, { once: true });
   }
 
   update(reasoning: string, attempt: number): void {
     if (this.disposed) return;
     if (attempt !== this.attempt) this.reset(attempt);
     this.reasoning = reasoning;
+    if (reasoning.trim() && !this.timer) this.startTimer();
   }
 
   dispose(): void {
@@ -241,7 +240,7 @@ export class ThinkingSummaryScheduler {
     this.previousSummary = 'Thinking';
     this.lastRequestedLength = 0;
     if (this.timer) clearInterval(this.timer);
-    this.startTimer();
+    this.timer = undefined;
   }
 
   private startTimer(): void {
@@ -277,25 +276,27 @@ export class ThinkingSummaryScheduler {
 /** Owns the stable UI label and elapsed time; semantic labels come from the sidecar model. */
 export class ThinkingSummaryTracker {
   private attempt: number;
-  private startedAt: number;
-  private label = 'Thinking';
+  private pendingStartedAt: number;
+  private thinkingStartedAt?: number;
+  private label = 'Pending';
   private stages: ThinkingTimelineStage[] = [];
-  private complete = false;
+  private phase: ThinkingStatus['phase'] = 'pending';
   private completedElapsedMs?: number;
 
   constructor(now = Date.now(), attempt = 1) {
     this.attempt = attempt;
-    this.startedAt = now;
+    this.pendingStartedAt = now;
   }
 
-  update(content: string, attempt: number, now = Date.now()): ThinkingStatus {
+  update(reasoning: string, content: string, attempt: number, now = Date.now()): ThinkingStatus {
     if (attempt !== this.attempt) this.reset(attempt, now);
+    if (this.phase === 'pending' && (reasoning.length > 0 || content.length > 0)) this.startThinking(now);
     if (content.length > 0) return this.finish(now);
     return this.status(now);
   }
 
   applySummary(stage: ThinkingStage, attempt: number, now = Date.now()): ThinkingStatus {
-    if (attempt !== this.attempt || this.complete) return this.status(now);
+    if (attempt !== this.attempt || this.phase !== 'thinking') return this.status(now);
     const normalized = normalizeThinkingStage(stage);
     if (!normalized) return this.status(now);
     this.label = normalized.title;
@@ -309,29 +310,39 @@ export class ThinkingSummaryTracker {
   }
 
   finish(now = Date.now()): ThinkingStatus {
-    if (!this.complete) {
-      this.complete = true;
+    if (this.phase !== 'complete') {
+      this.phase = 'complete';
       this.label = '思考完成';
-      this.completedElapsedMs = Math.max(0, now - this.startedAt);
+      this.completedElapsedMs = this.thinkingStartedAt === undefined ? 0 : Math.max(0, now - this.thinkingStartedAt);
     }
     return this.status(now);
   }
 
+  private startThinking(now: number): void {
+    this.phase = 'thinking';
+    this.label = 'Thinking';
+    this.thinkingStartedAt = now;
+  }
+
   private reset(attempt: number, now: number): void {
     this.attempt = attempt;
-    this.startedAt = now;
-    this.label = 'Thinking';
+    this.pendingStartedAt = now;
+    this.thinkingStartedAt = undefined;
+    this.label = 'Pending';
     this.stages = [];
-    this.complete = false;
+    this.phase = 'pending';
     this.completedElapsedMs = undefined;
   }
 
   private status(now: number): ThinkingStatus {
-    const elapsedMs = this.completedElapsedMs ?? Math.max(0, now - this.startedAt);
+    const elapsedMs = this.phase === 'complete'
+      ? this.completedElapsedMs ?? 0
+      : Math.max(0, now - (this.phase === 'thinking' ? this.thinkingStartedAt ?? now : this.pendingStartedAt));
     return {
       label: this.label,
       stages: this.stages.map(stage => ({ title: stage.title, details: [...stage.details] })),
-      complete: this.complete,
+      phase: this.phase,
+      complete: this.phase === 'complete',
       elapsedMs,
       attempt: this.attempt
     };

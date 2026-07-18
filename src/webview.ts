@@ -112,12 +112,17 @@ function reviewProfileSelect(reviewModel: string, thinkingLevel: ThinkingLevel):
 }
 
 function thinkingStatusContent(status: ThinkingStatus): string {
-  const elapsedSeconds = Math.floor(status.elapsedMs / 1000);
-  const text = status.complete ? `思考完成 · ${elapsedSeconds} 秒` : `Thinking · ${elapsedSeconds} 秒`;
+  const text = thinkingStatusText(status);
   const stages = status.stages.map(stage => `<li data-stage-title="${escapeHtml(stage.title)}"><strong class="thinking-stage-title">${escapeHtml(stage.title)}</strong>${stage.details.map(detail => `<p class="thinking-stage-detail">${escapeHtml(detail)}</p>`).join('')}</li>`).join('');
   const stageList = status.complete ? '' : `<ol id="thinking-stages" class="thinking-stages">${stages}</ol>`;
-  const statusHtml = `<div class="thinking-block"><div class="stream-status${status.complete ? ' thinking-complete' : ''}"><span id="thinking-spinner" class="spinner"${status.complete ? ' hidden' : ''}></span><span id="thinking-check" class="thinking-check"${status.complete ? '' : ' hidden'}>✓</span><strong id="thinking-label" data-elapsed-ms="${status.elapsedMs}" data-complete="${status.complete}">${escapeHtml(text)}</strong><span id="attempt">${status.attempt > 1 ? `重试 ${status.attempt}/2` : ''}</span></div>${stageList}</div>`;
+  const statusHtml = `<div class="thinking-block"><div class="stream-status${status.complete ? ' thinking-complete' : ''}"><span id="thinking-spinner" class="spinner"${status.complete ? ' hidden' : ''}></span><span id="thinking-check" class="thinking-check"${status.complete ? '' : ' hidden'}>✓</span><strong id="thinking-label" data-elapsed-ms="${status.elapsedMs}" data-phase="${status.phase}" data-complete="${status.complete}">${escapeHtml(text)}</strong><span id="attempt">${status.attempt > 1 ? `重试 ${status.attempt}/2` : ''}</span></div>${stageList}</div>`;
   return `<div class="thinking-toolbar">${statusHtml}</div>`;
+}
+
+function thinkingStatusText(status: ThinkingStatus): string {
+  const seconds = Math.floor(status.elapsedMs / 1000);
+  if (status.phase === 'pending') return `Pending · ${seconds} 秒`;
+  return status.complete ? `思考完成 · ${seconds} 秒` : `Thinking · ${seconds} 秒`;
 }
 
 function shortcutHint(shortcut?: string): string {
@@ -165,12 +170,12 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
   } else if (state.kind === 'result') {
     body = `<header><span class="eyebrow">${escapeHtml(state.fileName)}</span><div id="header-actions">${reviewControls('重新评审', true, reviewShortcut)}</div></header>${state.thinkingStatus ? thinkingStatusContent(state.thinkingStatus) : ''}<section class="live-preview final-result result-stack">${resultContent(state.source, state.result)}</section>`;
   } else if (state.kind === 'history') {
-    body = `<header><div><span class="eyebrow">评测历史</span><h1>历史记录</h1></div><button id="history-close" class="secondary">返回</button></header>${historyListContent(state.entries)}`;
+    body = `<header><h1>评测历史</h1></header>${historyListContent(state.entries)}`;
   } else if (state.kind === 'history-detail') {
     const entry = state.entry;
-    body = `<header><div><span class="eyebrow">${escapeHtml(entry.displayPath)}</span><h1>${escapeHtml(entry.fileName)}</h1></div><div class="history-detail-actions"><button id="history-back" class="secondary">全部记录</button><button id="history-close" class="secondary">返回</button></div></header><p class="history-reviewed-at">评审于 ${escapeHtml(reviewedAtLabel(entry.reviewedAt))}</p><section class="live-preview final-result result-stack">${resultContent(entry.source, entry.result, entry.fileUri)}</section>`;
+    body = `<header><div class="history-detail-heading"><span class="eyebrow">${escapeHtml(entry.displayPath)}</span><h1>${escapeHtml(entry.fileName)}</h1></div><div class="history-detail-actions"><button id="history-back" class="secondary">返回</button></div></header><p class="history-reviewed-at">评审于 ${escapeHtml(reviewedAtLabel(entry.reviewedAt))}</p><section class="live-preview final-result result-stack">${resultContent(entry.source, entry.result, entry.fileUri)}</section>`;
   } else {
-    body = `<div class="center"><div class="state-icon">✓</div><h1>408 Judge</h1><p>${escapeHtml(state.message ?? '打开一道 .c 或 .cpp 作答，然后从编辑器右键菜单开始评审。')}</p>${reviewControls('评审当前 C/C++ 作答', false, reviewShortcut)}</div>`;
+    body = `<div class="center"><div class="state-icon">✓</div><h1>408 Judge</h1><p>${escapeHtml(state.message ?? '打开一道 .c 或 .cpp 作答，然后点击开始评审。')}</p>${reviewControls('评审当前 C/C++ 作答', false, reviewShortcut)}</div>`;
   }
   return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src ${cspSource ? `${escapeHtml(cspSource)} ` : ''}'nonce-${nonce}';">
@@ -191,13 +196,17 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     .history-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
     .history-item{display:flex;width:100%;flex-direction:column;align-items:stretch;gap:4px;padding:11px 12px;text-align:left;color:var(--vscode-foreground);background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-editorWidget-border);border-radius:6px}
     .history-item:hover{background:var(--vscode-list-hoverBackground);border-color:var(--vscode-focusBorder)}
-    .history-item-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .history-item .verdict{padding:2px 7px;font-size:11px}
+    .history-item-top{display:flex;min-width:0;align-items:flex-start;justify-content:space-between;gap:10px}
+    .history-item-top>strong{min-width:0;flex:1;overflow-wrap:anywhere}
+    .history-item .verdict{flex:0 0 auto;padding:2px 7px;font-size:11px;white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb}
     .history-path,.history-item time,.history-reviewed-at{color:var(--vscode-descriptionForeground);font-size:11px}
     .history-summary{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:12px}
     .history-item time{text-align:right}
     .history-empty{padding:42px 8px;text-align:center}
-    .history-detail-actions{display:flex;gap:5px}
+    .history-detail-heading{min-width:0;flex:1}
+    .history-detail-heading .eyebrow,.history-detail-heading h1{overflow-wrap:anywhere}
+    .history-detail-actions{display:flex;flex:0 0 auto;align-items:flex-start;gap:5px}
+    .history-detail-actions button{white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb}
     .history-reviewed-at{margin:-6px 0 14px}
     .result-stack{display:flex;flex-direction:column;gap:10px}
     .result-block{padding:13px 14px 12px;border:1px solid color-mix(in srgb,var(--vscode-editorWidget-border) 72%,transparent);border-radius:7px;background:color-mix(in srgb,var(--vscode-editorWidget-background) 58%,transparent)}
@@ -233,7 +242,7 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
     @media (prefers-reduced-motion:reduce){.result-block-enter,.thinking-stage-enter .thinking-stage-title,.thinking-stage-enter::before,.thinking-stage-connected::after,.thinking-summary-batch{animation:none}}
   </style></head><body><main id="view-content" class="view-content">${body}</main>${appFooter(state, thinkingLevel, reviewModel)}${confettiScriptUri ? `<script nonce="${nonce}" src="${escapeHtml(confettiScriptUri)}"></script>` : ''}<script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingDone=thinkingLabel?.dataset.complete==='true';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent='Thinking · '+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
+    const thinkingLabel=document.getElementById('thinking-label');let thinkingElapsed=Number(thinkingLabel?.dataset.elapsedMs||0);let thinkingAnchor=Date.now();let thinkingPhase=thinkingLabel?.dataset.phase||'thinking';let thinkingDone=thinkingPhase==='complete';const updateThinkingTime=()=>{if(thinkingLabel&&!thinkingDone)thinkingLabel.textContent=(thinkingPhase==='pending'?'Pending · ':'Thinking · ')+Math.floor((thinkingElapsed+Date.now()-thinkingAnchor)/1000)+' 秒'};const thinkingTimer=setInterval(updateThinkingTime,250);window.addEventListener('unload',()=>clearInterval(thinkingTimer));
     const reduceOutputMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const viewContent=document.getElementById('view-content');
     let autoFollowOutput=true;
@@ -245,6 +254,11 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
         followOutputFrame=0;
         viewContent.scrollTo({top:viewContent.scrollHeight,behavior:reduceOutputMotion?'auto':'smooth'});
       });
+    };
+    const cancelLiveOutputFollow=()=>{
+      if(!followOutputFrame)return;
+      cancelAnimationFrame(followOutputFrame);
+      followOutputFrame=0;
     };
     viewContent?.addEventListener('scroll',updateOutputFollow,{passive:true});
     window.addEventListener('resize',updateOutputFollow);
@@ -291,6 +305,8 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
         return;
       }
       if(event.data?.type!=='stream')return;
+      const finalOutput=Boolean(event.data.final);
+      if(finalOutput)cancelLiveOutputFollow();
       const spinner=document.getElementById('thinking-spinner');
       const check=document.getElementById('thinking-check');
       const preview=document.getElementById('structured-preview');
@@ -300,8 +316,9 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
       if(thinkingLabel&&typeof event.data.thinkingElapsedMs==='number'){
         thinkingElapsed=event.data.thinkingElapsedMs;
         thinkingAnchor=Date.now();
-        thinkingDone=Boolean(event.data.thinkingComplete);
-        thinkingLabel.textContent=thinkingDone?event.data.thinkingText:('Thinking · '+Math.floor(thinkingElapsed/1000)+' 秒');
+        thinkingPhase=event.data.thinkingPhase||'thinking';
+        thinkingDone=thinkingPhase==='complete';
+        thinkingLabel.textContent=thinkingDone?event.data.thinkingText:((thinkingPhase==='pending'?'Pending · ':'Thinking · ')+Math.floor(thinkingElapsed/1000)+' 秒');
       }
       if(spinner)spinner.hidden=Boolean(event.data.thinkingComplete);
       if(check)check.hidden=!event.data.thinkingComplete;
@@ -343,9 +360,9 @@ export function renderWebview(state: ViewState, nonce: string, celebrateCorrect 
       }
       if(preview&&typeof event.data.previewHtml==='string'){
         syncResultBlocks(preview,event.data.previewHtml);
-        followLiveOutput();
+        if(!finalOutput)followLiveOutput();
       }
-      if(event.data.final){
+      if(finalOutput){
         if(headerActions&&typeof event.data.headerActionsHtml==='string'){
           headerActions.innerHTML=event.data.headerActionsHtml;
           bindControls(headerActions);
@@ -427,24 +444,20 @@ export class JudgeViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       const celebrateCorrect = this.consumeCorrectCelebration();
       void this.view.webview.postMessage({
         type: 'stream', final: true,
-        thinkingText: state.thinkingStatus ? `思考完成 · ${Math.floor(state.thinkingStatus.elapsedMs / 1000)} 秒` : undefined,
+        thinkingText: state.thinkingStatus ? thinkingStatusText(state.thinkingStatus) : undefined,
         thinkingStages: state.thinkingStatus?.stages ?? [], thinkingElapsedMs: state.thinkingStatus?.elapsedMs,
-        thinkingComplete: true, previewHtml: resultContent(state.source, state.result),
+        thinkingPhase: state.thinkingStatus?.phase, thinkingComplete: true, previewHtml: resultContent(state.source, state.result),
         headerActionsHtml: reviewControls('重新评审', true, this.reviewShortcut),
         attempt: previous.attempt, celebrateCorrect
       });
       return;
     }
     if (this.view && previous.kind === 'loading' && state.kind === 'loading' && !thinkingJustCompleted) {
-      const thinkingText = state.thinkingStatus
-        ? state.thinkingStatus.complete
-          ? `思考完成 · ${Math.floor(state.thinkingStatus.elapsedMs / 1000)} 秒`
-          : `Thinking · ${Math.floor(state.thinkingStatus.elapsedMs / 1000)} 秒`
-        : undefined;
+      const thinkingText = state.thinkingStatus ? thinkingStatusText(state.thinkingStatus) : undefined;
       const celebrateCorrect = state.preview.strengths !== undefined && this.consumeCorrectCelebration();
       void this.view.webview.postMessage({
         type: 'stream', thinkingText, thinkingStages: state.thinkingStatus?.stages ?? [], thinkingElapsedMs: state.thinkingStatus?.elapsedMs,
-        thinkingComplete: state.thinkingStatus?.complete ?? false,
+        thinkingPhase: state.thinkingStatus?.phase, thinkingComplete: state.thinkingStatus?.complete ?? false,
         previewHtml: previewContent(state.preview), attempt: state.attempt, celebrateCorrect
       });
       return;
